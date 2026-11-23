@@ -23,7 +23,7 @@ static DID_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^did:(?:plc|web):[a-zA-Z0-9._:%-]+$").unwrap());
 
 fn api_base() -> String {
-    std::env::var("bluesky_public_api")
+    crate::config::var("bluesky_public_api")
         .ok()
         .filter(|v| !v.trim().is_empty())
         .unwrap_or_else(|| "https://public.api.bsky.app".into())
@@ -427,14 +427,17 @@ fn post_embed(handle: &str, display: Option<&str>, post: &Value) -> serenity::Cr
 
 /// Toutes les 5 minutes : nouveaux posts des comptes suivis.
 pub async fn check_loop(ctx: serenity::Context, data: Data) {
-    tracing::info!("Démarrage de la boucle de vérification Bluesky");
-    let mut interval = tokio::time::interval(Duration::from_secs(300));
-    loop {
-        interval.tick().await;
-        if let Err(e) = check_once(&ctx, &data).await {
-            tracing::error!("[Bluesky] Erreur lors de la vérification: {e:#}");
-        }
-    }
+    crate::tasks::every(
+        "Bluesky",
+        Some("bluesky"),
+        Duration::from_secs(300),
+        || async {
+            if let Err(e) = check_once(&ctx, &data).await {
+                tracing::error!("[Bluesky] Erreur lors de la vérification: {e:#}");
+            }
+        },
+    )
+    .await;
 }
 
 async fn update_last(

@@ -7,20 +7,16 @@
   "cmd.ping.desc": "Replies with pong!",
   "cmd.ping_bot.desc": "Measures the ping between Discord and the bot.",
   "cmd.reload.desc": "Reloads the bot commands.",
-
   "coinflip.title": "Coin flip :coin:",
   "coinflip.result": "The result is: {result}",
   "coinflip.heads": "heads",
   "coinflip.tails": "tails",
-
   "count.guild_only": "This command can only be used in a server.",
   "count.no_db": "The database path is not set in the environment variables.",
   "count.already": "The counter minigame is already configured in {channel}.",
   "count.configured": "The counter minigame has been configured in {channel}.",
-
   "ping.response": "Pong!",
   "ping_bot.response": "Pong! Latency: {latency:.2f} ms",
-
   "reload.unknown_feature": "❌ Unknown feature: `{feature}`",
   "reload.apply_failed": "❌ Unable to apply the change for `{feature}`: {error}",
   "reload.state_enabled": "enabled",
@@ -30,7 +26,6 @@
   "reload.toggle_success": "✅ Feature **{label}** {state}. .env updated, commands {sync}.",
   "reload.title": "Reloading commands",
   "bot.presence": "Ready to help!",
-
   "feature.ai": "AI command",
   "feature.coinflip": "Coinflip",
   "feature.count": "Counter",
@@ -56,7 +51,6 @@
   "reload.features_title": "Bot features",
   "reload.feature_status_on": "✅ Enabled",
   "reload.feature_status_off": "❌ Disabled",
-
   "cmd.leaderboard.desc": "Shows the level leaderboard",
   "cmd.level.desc": "Shows your level and XP",
   "xp.field_level": "🎯 Level",
@@ -74,7 +68,6 @@
   "xp.messages_count": "{count} messages",
   "xp.no_xp_other": "{user} doesn't have any XP yet!",
   "xp.no_xp_self": "You don't have any XP yet! Send messages to earn some.",
-
   "mod.footer": "ISROBOT moderation system",
   "mod.field.appeal": "📝 Appeal",
   "mod.field.appeal_value": "You can appeal this warning using the `/appeal` command with your reason.",
@@ -116,7 +109,6 @@
   "mod.duration.hours": "{n} hours",
   "mod.duration.day": "{n} day",
   "mod.duration.days": "{n} days",
-
   "mod.ctx.no_perm": "❌ You don't have permission to warn users.",
   "mod.ctx.bot": "❌ You cannot warn a bot.",
   "mod.ctx.self": "❌ You cannot warn yourself.",
@@ -137,7 +129,6 @@
   "mod.modal.reason_placeholder": "E.g. Spam, Toxicity, Insults, NSFW, Rule violation...",
   "mod.modal.notes_label": "Additional notes (optional)",
   "mod.modal.notes_placeholder": "Add more details...",
-
   "cmd.modconfig.desc": "Configure the moderation system",
   "cmd.modconfig.view.desc": "View the moderation configuration",
   "cmd.modconfig.set.desc": "Set a moderation parameter",
@@ -163,7 +154,6 @@
   "modconfig.invalid_value": "❌ Invalid value for `{param}`: `{value}`",
   "modconfig.updated": "✅ Configuration updated:\n**{param}** = `{value}`",
   "modconfig.set_error": "❌ An error occurred while configuring: {error}",
-
   "cmd.appeal.desc": "Appeal a warning",
   "cmd.appeal.reason": "Reason for your appeal (max 1000 characters)",
   "appeal.no_warns": "❌ You have no active warnings.",
@@ -205,7 +195,6 @@
   "appeal.deny_modal.title": "Deny the appeal",
   "appeal.deny_modal.label": "Reason for denial",
   "appeal.deny_modal.placeholder": "Explain why the appeal is denied...",
-
   "cmd.warn.desc": "Issue a warning to a user",
   "cmd.warn.user": "The user to warn",
   "cmd.warn.reason": "Reason for the warning",
@@ -222,7 +211,6 @@
   "cmd.unmute.user": "The user to unmute",
   "cmd.modlog.desc": "Show the moderation log",
   "cmd.modlog.user": "Specific user (optional)",
-
   "mod.no_reason": "No reason",
   "warn.action_auto_mute": "\n🔇 **Automatic mute applied:** {duration}",
   "warn.action_warn4": "\n⚠️ **Warning:** The user has 4+ warnings. Manual action required.",
@@ -252,7 +240,6 @@
   "modlog.title_server": "📋 Moderation log - Server",
   "modlog.no_entries": "No entries found",
   "modlog.error": "❌ An error occurred while retrieving the log.",
-
   "cmd.ai.desc": "Ask the AI a question",
   "cmd.ai.question": "Your question for the AI",
   "ai.disabled.title": "Feature disabled",
@@ -295,7 +282,6 @@
   "ai.field_content": "Message content",
   "ai.no_text": "*[No text]*",
   "ai.flag_footer": "AI assistant • Moderators have the final say",
-
   "cmd.stream_add.desc": "Add a streamer to the streamer list.",
   "cmd.stream_remove.desc": "Remove a streamer from the streamer list.",
   "cmd.stream_list.desc": "Show the list of tracked streamers.",
@@ -317,7 +303,6 @@
   "stream.field_value": "Channel: {channel}\nRole: {role}\nStatus: {status}",
   "stream.list_error": "❌ Error retrieving the list: {error}",
   "stream.announce_desc": "**Channel**: {name} \n**Category**: {category}\n **Watch the stream here:** {url}",
-
   "cmd.youtube_add.desc": "Add a YouTube channel to the watch list.",
   "cmd.youtube_remove.desc": "Remove a YouTube channel from the watch list.",
   "youtube.no_api": "❌ The YouTube API key is not configured.",
@@ -346,7 +331,6 @@
   "youtube.new_video_desc": "**Channel**: {name}\n**Watch the video here:** {url}",
   "youtube.new_short_title": "🎬 New short: {title}",
   "youtube.new_short_desc": "**Channel**: {name}\n**Watch the short here:** {url}",
-
   "cmd.bluesky_add.desc": "Add a Bluesky account to the watch list.",
   "cmd.bluesky_remove.desc": "Remove a Bluesky account from the watch list.",
   "cmd.bluesky_list.desc": "Show the list of followed Bluesky accounts.",
@@ -370,7 +354,6 @@
   "bluesky.new_post_desc": "{text}\n\n**View the post:** {url}",
   "bluesky.footer": "Bluesky — @{handle}",
   "bluesky.no_text": "🦋 (post without text)",
-
   "minigame.disabled": "🎮 **Minigame disabled**\n\nThe minigames are disabled.",
   "minigame.coinflip.invalid_bet": "❌ Your bet must be a positive number.",
   "minigame.coinflip.insufficient": "❌ You don't have enough money. Your balance: {bal}",
@@ -381,7 +364,6 @@
   "minigame.coinflip.heads": "Heads",
   "minigame.common.balance": "Balance: {bal} 💰",
   "minigame.common.error": "An error occurred.",
-
   "cmd.minigame.desc": "Minigame system commands",
   "cmd.minigame.enable.desc": "Enable the minigame system for this server (Admin only)",
   "cmd.minigame.disable.desc": "Disable the minigame system for this server (Admin only)",
@@ -433,7 +415,6 @@
   "cmd.duel.opponent": "Player to challenge",
   "cmd.duel.bet": "Amount each player bets (10-500)",
   "cmd.stats.desc": "View your capture and duel statistics",
-
   "minigame.common.guild_only": "This command can only be used in a server.",
   "minigame.common.error_title": "❌ Error",
   "minigame.common.level_up_title": "🎊 Level Up!",
@@ -583,18 +564,15 @@
   "minigame.stats.net": "Net: {net} 🪙",
   "minigame.stats.duels_field": "⚔️ Duels",
   "minigame.stats.fights": "Fights: {fights}",
-
   "mod.dm.expired_title": "🔊 Mute expired",
   "mod.dm.expired_desc": "Your mute on **{guild}** has expired.",
   "mod.dm.expired_field": "Reminder",
   "mod.dm.expired_value": "Don't forget to respect the server rules.",
-
   "count.same_user": "You cannot count twice in a row!",
   "count.reset": "Let's start over from zero!",
   "count.reset_done": "The counter has been reset.",
   "count.same_number": "You used the same number! The correct number was {expected}",
   "count.wrong_number": "Wrong number! The correct number was {expected}, but you entered {actual}.",
-
   "errors.title": "Error",
   "errors.footer": "If the problem persists, contact an administrator.",
   "errors.system_footer": "ISROBOT system",
@@ -615,5 +593,27 @@
   "errors.channel_not_found": "❌ **Channel not found**\nThe specified channel was not found.",
   "errors.cooldown": "⏳ **Cooldown active**\nPlease wait {time} before using this command again.",
   "errors.rate_limited": "🚫 **Rate limit reached**\nYou have made too many requests. Please wait {time}.",
-  "errors.unknown_error": "❌ **Unexpected error**\nAn unexpected error occurred. Please try again later."
+  "errors.unknown_error": "❌ **Unexpected error**\nAn unexpected error occurred. Please try again later.",
+  "cmd.count.channel": "Channel where the counting game takes place",
+  "cmd.level.user": "Member whose level to show (you by default)",
+  "cmd.stream_add.streamer_name": "Twitch channel name",
+  "cmd.stream_add.channel": "Channel where announcements are posted",
+  "cmd.stream_add.ping_role": "Role to mention (optional)",
+  "cmd.stream_remove.streamer_name": "Twitch channel name to remove",
+  "cmd.youtube_add.channel_id": "Channel ID (UC...) or handle (@name)",
+  "cmd.youtube_add.channel": "Channel where announcements are posted",
+  "cmd.youtube_add.notify_videos": "Announce videos (yes by default)",
+  "cmd.youtube_add.notify_shorts": "Announce shorts (yes by default)",
+  "cmd.youtube_add.ping_role": "Role to mention (optional)",
+  "cmd.youtube_remove.channel_name": "YouTube channel name to remove",
+  "cmd.bluesky_add.account": "Account handle (name.bsky.social) or DID",
+  "cmd.bluesky_add.channel": "Channel where announcements are posted",
+  "cmd.bluesky_add.ping_role": "Role to mention (optional)",
+  "cmd.bluesky_remove.account": "Handle of the account to remove",
+  "cmd.feature_enable.feature": "Feature to enable",
+  "cmd.feature_disable.feature": "Feature to disable",
+  "mod.log.field_warn_count": "Warning count",
+  "mod.log.field_duration": "Duration",
+  "mod.log.field_warn_count_before": "Warnings before",
+  "mod.log.field_warn_count_after": "Warnings after"
 }

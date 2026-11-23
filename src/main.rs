@@ -1,6 +1,7 @@
 //! ISROBOT — version Rust (poise + serenity).
 
 mod ai;
+mod backup;
 mod bot;
 mod commands;
 mod config;
@@ -89,6 +90,10 @@ async fn main() -> Result<()> {
 
     tracing::info!("Initialisation de la base de données...");
     let database = db::Db::new(&config.db_path);
+    if config.db_path.exists() && !backup::auto_recover(&config.db_path, &backup::backup_dir(&root))
+    {
+        tracing::error!("La base de données est corrompue et n'a pas pu être restaurée.");
+    }
     {
         let database = database.clone();
         tokio::task::spawn_blocking(move || db::init(&database))
@@ -102,6 +107,10 @@ async fn main() -> Result<()> {
         .options(poise::FrameworkOptions {
             commands,
             on_error: |e| Box::pin(errors::on_error(e)),
+            // Une fonctionnalité désactivée à chaud ne répond plus.
+            command_check: Some(|ctx| {
+                Box::pin(async move { Ok(commands::command_enabled(ctx.command())) })
+            }),
             event_handler: |fw, event| Box::pin(event_handler(fw, event)),
             ..Default::default()
         })
@@ -118,13 +127,9 @@ async fn main() -> Result<()> {
                     let guild = serenity::GuildId::new(config.server_id);
                     // Les commandes sont déclarées sur le serveur configuré (instantané),
                     // et les anciennes commandes globales sont retirées.
-                    poise::builtins::register_in_guild(ctx, &framework.options().commands, guild)
-                        .await?;
+                    let n = commands::sync(ctx, &framework.options().commands, guild).await?;
                     serenity::Command::set_global_commands(ctx, vec![]).await?;
-                    tracing::info!(
-                        "{} commande(s) synchronisée(s) avec le serveur",
-                        framework.options().commands.len()
-                    );
+                    tracing::info!("{n} commande(s) synchronisée(s) avec le serveur");
                     let data = Data::new(config, database);
                     tasks::spawn_all(ctx.clone(), data.clone());
                     Ok(data)
@@ -198,6 +203,10 @@ async fn event_handler(
             }
             if let Err(e) = track_message_quest(data, msg).await {
                 tracing::error!("Erreur lors de la progression de quête (messages_sent): {e:#}");
+            }
+            // Modération IA (sans effet si désactivée ou non configurée).
+            if let Err(e) = commands::ai::moderate_message(ctx, data, msg).await {
+                tracing::error!("Erreur lors de l'analyse IA du message: {e:#}");
             }
             if features::is_enabled("xp_system")
                 && let Err(e) = commands::xp_system::on_message(ctx, data, msg).await

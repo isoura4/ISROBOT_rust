@@ -22,7 +22,7 @@ Si une question viole ces règles, réponds simplement: \"Je ne peux pas répond
 ";
 
 fn limit(key: &str, default: usize) -> usize {
-    std::env::var(key)
+    crate::config::var(key)
         .ok()
         .and_then(|v| v.trim().parse().ok())
         .unwrap_or(default)
@@ -72,7 +72,7 @@ pub async fn ai(ctx: Context<'_>, question: String) -> Result<(), Error> {
         .await?;
         return Ok(());
     }
-    if ai::contains_inappropriate_content(&question) {
+    if ai::enabled(Feature::ContentFilter) && ai::contains_inappropriate_content(&question) {
         let e = error_embed(
             tr!("ai.inappropriate_title", loc),
             tr!("ai.inappropriate_desc", loc),
@@ -119,7 +119,7 @@ pub async fn ai(ctx: Context<'_>, question: String) -> Result<(), Error> {
         .await?;
         return Ok(());
     };
-    if ai::contains_inappropriate_content(&answer) {
+    if ai::enabled(Feature::ContentFilter) && ai::contains_inappropriate_content(&answer) {
         let e = error_embed(tr!("ai.filtered_title", loc), tr!("ai.filtered_desc", loc)).footer(
             serenity::CreateEmbedFooter::new(tr!("ai.filtered_footer", loc)),
         );

@@ -12,10 +12,10 @@ use crate::bot::{Context, Data, Error, colors, reply_ephemeral};
 use crate::tr;
 
 fn credentials() -> Option<(String, String)> {
-    let id = std::env::var("twitch_client_id")
+    let id = crate::config::var("twitch_client_id")
         .ok()
         .filter(|v| !v.trim().is_empty())?;
-    let secret = std::env::var("twitch_client_secret")
+    let secret = crate::config::var("twitch_client_secret")
         .ok()
         .filter(|v| !v.trim().is_empty())?;
     Some((id, secret))
@@ -155,7 +155,8 @@ pub async fn stream_list(ctx: Context<'_>) -> Result<(), Error> {
     {
         Ok(r) => r,
         Err(e) => {
-            return reply_ephemeral(ctx, tr!("stream.list_error", loc, error = e.to_string())).await;
+            return reply_ephemeral(ctx, tr!("stream.list_error", loc, error = e.to_string()))
+                .await;
         }
     };
     if rows.is_empty() {
@@ -240,10 +241,10 @@ where
 }
 
 async fn auth_token(http: &reqwest::Client) -> anyhow::Result<String> {
-    if let Some((t, exp)) = TOKEN.lock().unwrap().clone() {
-        if Instant::now() < exp {
-            return Ok(t);
-        }
+    if let Some((t, exp)) = TOKEN.lock().unwrap().clone()
+        && Instant::now() < exp
+    {
+        return Ok(t);
     }
     let (id, secret) = credentials()
         .ok_or_else(|| anyhow::anyhow!("Les identifiants Twitch ne sont pas configurés."))?;
@@ -335,17 +336,20 @@ fn announce_embed(name: &str, title: &str, category: &str) -> serenity::CreateEm
 
 /// Toutes les 5 minutes : annonce des streamers passés en ligne.
 pub async fn check_loop(ctx: serenity::Context, data: Data) {
-    tracing::info!("Démarrage de la boucle de vérification Twitch");
-    let mut interval = tokio::time::interval(Duration::from_secs(300));
-    loop {
-        interval.tick().await;
-        if credentials().is_none() {
-            continue;
-        }
-        if let Err(e) = check_once(&ctx, &data).await {
-            tracing::error!("Erreur lors de la vérification des streams: {e:#}");
-        }
-    }
+    crate::tasks::every(
+        "Twitch",
+        Some("stream"),
+        Duration::from_secs(300),
+        || async {
+            if credentials().is_none() {
+                return;
+            }
+            if let Err(e) = check_once(&ctx, &data).await {
+                tracing::error!("Erreur lors de la vérification des streams: {e:#}");
+            }
+        },
+    )
+    .await;
 }
 
 async fn check_once(ctx: &serenity::Context, data: &Data) -> Result<(), Error> {

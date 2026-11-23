@@ -296,10 +296,10 @@ async fn lift_auto_mute_if_clean(
         .await
         .ok()
         .flatten();
-    if auto == Some(true) {
-        if let Err(e) = m::lift_mute(&ctx.http, data, guild, user, moderator, reason).await {
-            tracing::error!("Erreur lors du retrait du timeout: {e:#}");
-        }
+    if auto == Some(true)
+        && let Err(e) = m::lift_mute(&ctx.http, data, guild, user, moderator, reason).await
+    {
+        tracing::error!("Erreur lors du retrait du timeout: {e:#}");
     }
 }
 
@@ -1390,16 +1390,19 @@ pub async fn handle_component(
 
 /// Toutes les 6 h : expiration des avertissements.
 pub async fn warning_decay_loop(ctx: serenity::Context, data: Data) {
-    tracing::info!("Démarrage de la boucle d'expiration des avertissements");
-    let mut interval = tokio::time::interval(std::time::Duration::from_secs(6 * 3600));
-    loop {
-        interval.tick().await;
-        if let Err(e) = decay_once(&ctx, &data).await {
-            tracing::error!(
-                "Erreur lors de la vérification d'expiration des avertissements: {e:#}"
-            );
-        }
-    }
+    crate::tasks::every(
+        "d'expiration des avertissements",
+        None,
+        std::time::Duration::from_secs(6 * 3600),
+        || async {
+            if let Err(e) = decay_once(&ctx, &data).await {
+                tracing::error!(
+                    "Erreur lors de la vérification d'expiration des avertissements: {e:#}"
+                );
+            }
+        },
+    )
+    .await;
 }
 
 async fn decay_once(ctx: &serenity::Context, data: &Data) -> Result<(), Error> {
@@ -1466,14 +1469,17 @@ async fn decay_once(ctx: &serenity::Context, data: &Data) -> Result<(), Error> {
 
 /// Toutes les minutes : levée des mutes expirés.
 pub async fn mute_expiration_loop(ctx: serenity::Context, data: Data) {
-    tracing::info!("Démarrage de la boucle d'expiration des mutes");
-    let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
-    loop {
-        interval.tick().await;
-        if let Err(e) = expire_mutes_once(&ctx, &data).await {
-            tracing::error!("Erreur lors de la vérification d'expiration des mutes: {e:#}");
-        }
-    }
+    crate::tasks::every(
+        "d'expiration des mutes",
+        None,
+        std::time::Duration::from_secs(60),
+        || async {
+            if let Err(e) = expire_mutes_once(&ctx, &data).await {
+                tracing::error!("Erreur lors de la vérification d'expiration des mutes: {e:#}");
+            }
+        },
+    )
+    .await;
 }
 
 async fn expire_mutes_once(ctx: &serenity::Context, data: &Data) -> Result<(), Error> {

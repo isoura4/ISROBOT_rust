@@ -23,9 +23,6 @@ pub mod colors {
     pub const ORANGE: u32 = 0xe67e22;
     pub const PURPLE: u32 = 0x9b59b6;
     pub const LIGHT_GRAY: u32 = 0x979c9f;
-    pub const DARK_GRAY: u32 = 0x607d8b;
-    pub const TWITCH: u32 = 0x9146ff;
-    pub const YOUTUBE: u32 = 0xff0000;
     pub const BLUESKY: u32 = 0x0085ff;
 }
 
@@ -133,12 +130,6 @@ pub fn truncate(s: &str, max: usize) -> String {
     }
 }
 
-/// Défère la réponse d'une commande slash en mode éphémère.
-pub async fn defer_ephemeral(ctx: Context<'_>) -> Result<(), Error> {
-    ctx.defer_ephemeral().await?;
-    Ok(())
-}
-
 /// Répond en message éphémère.
 pub async fn reply_ephemeral(ctx: Context<'_>, content: impl Into<String>) -> Result<(), Error> {
     ctx.send(
@@ -147,15 +138,5 @@ pub async fn reply_ephemeral(ctx: Context<'_>, content: impl Into<String>) -> Re
             .ephemeral(true),
     )
     .await?;
-    Ok(())
-}
-
-/// Répond avec un embed éphémère.
-pub async fn reply_embed_ephemeral(
-    ctx: Context<'_>,
-    e: serenity::CreateEmbed,
-) -> Result<(), Error> {
-    ctx.send(poise::CreateReply::default().embed(e).ephemeral(true))
-        .await?;
     Ok(())
 }

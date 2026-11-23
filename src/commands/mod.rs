@@ -1,5 +1,6 @@
 //! Enregistrement des commandes et localisation de leurs descriptions.
 
+pub mod admin;
 pub mod ai;
 pub mod basic;
 pub mod bluesky;
@@ -64,24 +65,56 @@ fn modules() -> Vec<(&'static str, Builder)> {
     ]
 }
 
-/// Liste des commandes des modules activés dans le `.env`.
+/// Toutes les commandes. Chacune porte sa fonctionnalité dans `category`,
+/// ce qui permet de les activer/désactiver à chaud (`/feature_*`, `/reload`).
 pub fn all() -> Vec<Command> {
     let mut cmds = Vec::new();
     for (feature, build) in modules() {
-        if is_enabled(feature) {
-            cmds.extend(build());
-        } else {
+        for mut cmd in build() {
+            set_feature(&mut cmd, feature);
+            let path = cmd.name.to_string();
+            localize(&mut cmd, &path);
+            cmds.push(cmd);
+        }
+    }
+    cmds.extend(admin::commands().into_iter().map(|mut c| {
+        let path = c.name.to_string();
+        localize(&mut c, &path);
+        c
+    }));
+    cmds
+}
+
+fn set_feature(cmd: &mut Command, feature: &'static str) {
+    cmd.category = Some(Cow::Borrowed(feature));
+    for sub in &mut cmd.subcommands {
+        set_feature(sub, feature);
+    }
+}
+
+/// La commande appartient-elle à une fonctionnalité activée ?
+pub fn command_enabled(cmd: &Command) -> bool {
+    cmd.category.as_deref().is_none_or(is_enabled)
+}
+
+/// Déclare sur le serveur les commandes des fonctionnalités activées.
+pub async fn sync(
+    http: impl AsRef<poise::serenity_prelude::Http>,
+    cmds: &[Command],
+    guild: poise::serenity_prelude::GuildId,
+) -> Result<usize, crate::bot::Error> {
+    let enabled: Vec<&Command> = cmds.iter().filter(|c| command_enabled(c)).collect();
+    for (feature, _) in modules() {
+        if !is_enabled(feature) {
             tracing::info!(
                 "Module désactivé via .env: {}",
                 crate::features::feature_label(feature, None)
             );
         }
     }
-    for cmd in &mut cmds {
-        let path = cmd.name.to_string();
-        localize(cmd, &path);
-    }
-    cmds
+    let n = enabled.len();
+    poise::builtins::register_in_guild(http, enabled, guild).await?;
+    Ok(n)
 }
 
 /// Clé de traduction d'un chemin de commande (`trade offer` → `trade.offer`).
@@ -166,4 +199,55 @@ pub async fn handle_component(
         return Ok(());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn check(cmd: &Command, path: &str, problems: &mut Vec<String>) {
+        if cmd.context_menu_name.is_none() {
+            match &cmd.description {
+                Some(d) if !d.is_empty() && d.chars().count() <= 100 => {}
+                other => problems.push(format!("{path}: description {other:?}")),
+            }
+            for (loc, d) in cmd.description_localizations.iter() {
+                if d.chars().count() > 100 {
+                    problems.push(format!("{path} [{loc}]: description trop longue"));
+                }
+            }
+        }
+        for p in cmd
+            .parameters
+            .iter()
+            .filter(|_| cmd.context_menu_name.is_none())
+        {
+            match &p.description {
+                Some(d) if !d.is_empty() && d.chars().count() <= 100 => {}
+                other => problems.push(format!("{path} {}: description {other:?}", p.name)),
+            }
+        }
+        for sub in &cmd.subcommands {
+            check(sub, &format!("{path} {}", sub.name), problems);
+        }
+    }
+
+    /// Discord refuse l'enregistrement si une description manque ou dépasse 100 caractères.
+    #[test]
+    fn all_commands_are_registrable() {
+        let cmds = all();
+        let mut problems = Vec::new();
+        for c in &cmds {
+            check(c, &c.name, &mut problems);
+        }
+        assert!(problems.is_empty(), "{problems:#?}");
+        // La conversion vers le format Discord ne doit pas paniquer.
+        let built = poise::builtins::create_application_commands(&cmds);
+        assert_eq!(built.len(), cmds.len());
+        let mut names: Vec<_> = cmds.iter().map(|c| c.name.to_string()).collect();
+        names.sort();
+        let before = names.len();
+        names.dedup();
+        assert_eq!(before, names.len(), "noms de commandes en double");
+    }
 }

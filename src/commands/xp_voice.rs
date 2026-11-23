@@ -92,11 +92,10 @@ pub async fn award_loop(ctx: serenity::Context, data: Data) {
         }
     }
 
-    let mut interval = tokio::time::interval(CHECK_INTERVAL);
-    loop {
-        interval.tick().await;
-        award_once(&ctx, &data).await;
-    }
+    crate::tasks::every("XP vocal", Some("xp_voice"), CHECK_INTERVAL, || {
+        award_once(&ctx, &data)
+    })
+    .await;
 }
 
 async fn award_once(ctx: &serenity::Context, data: &Data) {

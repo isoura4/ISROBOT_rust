@@ -7,20 +7,16 @@
   "cmd.ping.desc": "Répond avec pong !",
   "cmd.ping_bot.desc": "Mesure le ping entre Discord et le bot.",
   "cmd.reload.desc": "Recharge les commandes du bot.",
-
   "coinflip.title": "Lancer de pièce :coin:",
   "coinflip.result": "Le résultat est : {result}",
   "coinflip.heads": "pile",
   "coinflip.tails": "face",
-
   "count.guild_only": "Cette commande ne peut être utilisée que dans un serveur.",
   "count.no_db": "Le chemin de la base de données n'est pas défini dans les variables d'environnement.",
   "count.already": "Le minijeux du compteur est déjà configuré dans le salon {channel}.",
   "count.configured": "Le minijeux du compteur a été configuré dans le salon {channel}.",
-
   "ping.response": "Pong !",
   "ping_bot.response": "Pong ! Latence : {latency:.2f} ms",
-
   "reload.unknown_feature": "❌ Fonctionnalité inconnue : `{feature}`",
   "reload.apply_failed": "❌ Impossible d'appliquer le changement pour `{feature}` : {error}",
   "reload.state_enabled": "activée",
@@ -30,7 +26,6 @@
   "reload.toggle_success": "✅ Fonctionnalité **{label}** {state}. .env mis à jour, commandes {sync}.",
   "reload.title": "Rechargement des commandes",
   "bot.presence": "Prêt à aider !",
-
   "feature.ai": "Commande IA",
   "feature.coinflip": "Coinflip",
   "feature.count": "Compteur",
@@ -56,7 +51,6 @@
   "reload.features_title": "Fonctionnalités du bot",
   "reload.feature_status_on": "✅ Activée",
   "reload.feature_status_off": "❌ Désactivée",
-
   "cmd.leaderboard.desc": "Affiche le classement des niveaux",
   "cmd.level.desc": "Affiche votre niveau et votre XP",
   "xp.field_level": "🎯 Niveau",
@@ -74,7 +68,6 @@
   "xp.messages_count": "{count} messages",
   "xp.no_xp_other": "{user} n'a pas encore d'XP !",
   "xp.no_xp_self": "Vous n'avez pas encore d'XP ! Envoyez des messages pour en gagner.",
-
   "mod.footer": "Système de modération ISROBOT",
   "mod.field.appeal": "📝 Faire appel",
   "mod.field.appeal_value": "Vous pouvez faire appel de cet avertissement en utilisant la commande `/appeal` avec votre raison.",
@@ -116,7 +109,6 @@
   "mod.duration.hours": "{n} heures",
   "mod.duration.day": "{n} jour",
   "mod.duration.days": "{n} jours",
-
   "mod.ctx.no_perm": "❌ Vous n'avez pas la permission d'avertir des utilisateurs.",
   "mod.ctx.bot": "❌ Vous ne pouvez pas avertir un bot.",
   "mod.ctx.self": "❌ Vous ne pouvez pas vous avertir vous-même.",
@@ -137,7 +129,6 @@
   "mod.modal.reason_placeholder": "Ex : Spam, Toxicité, Insultes, NSFW, Violation des règles...",
   "mod.modal.notes_label": "Notes additionnelles (optionnel)",
   "mod.modal.notes_placeholder": "Ajoutez des détails supplémentaires...",
-
   "cmd.modconfig.desc": "Configurer le système de modération",
   "cmd.modconfig.view.desc": "Afficher la configuration de modération",
   "cmd.modconfig.set.desc": "Configurer un paramètre de modération",
@@ -163,7 +154,6 @@
   "modconfig.invalid_value": "❌ Valeur invalide pour `{param}` : `{value}`",
   "modconfig.updated": "✅ Configuration mise à jour :\n**{param}** = `{value}`",
   "modconfig.set_error": "❌ Une erreur s'est produite lors de la configuration : {error}",
-
   "cmd.appeal.desc": "Faire appel d'un avertissement",
   "cmd.appeal.reason": "Raison de votre appel (max 1000 caractères)",
   "appeal.no_warns": "❌ Vous n'avez aucun avertissement actif.",
@@ -205,7 +195,6 @@
   "appeal.deny_modal.title": "Refuser l'appel",
   "appeal.deny_modal.label": "Raison du refus",
   "appeal.deny_modal.placeholder": "Expliquez pourquoi l'appel est refusé...",
-
   "cmd.warn.desc": "Émettre un avertissement à un utilisateur",
   "cmd.warn.user": "L'utilisateur à avertir",
   "cmd.warn.reason": "Raison de l'avertissement",
@@ -222,7 +211,6 @@
   "cmd.unmute.user": "L'utilisateur à démuter",
   "cmd.modlog.desc": "Afficher le journal de modération",
   "cmd.modlog.user": "Utilisateur spécifique (optionnel)",
-
   "mod.no_reason": "Aucune raison",
   "warn.action_auto_mute": "\n🔇 **Mute automatique appliqué :** {duration}",
   "warn.action_warn4": "\n⚠️ **Attention :** L'utilisateur a 4+ avertissements. Action manuelle requise.",
@@ -252,7 +240,6 @@
   "modlog.title_server": "📋 Journal de modération - Serveur",
   "modlog.no_entries": "Aucune entrée trouvée",
   "modlog.error": "❌ Une erreur s'est produite lors de la récupération du journal.",
-
   "cmd.ai.desc": "Poser une question à l'IA",
   "cmd.ai.question": "Votre question pour l'IA",
   "ai.disabled.title": "Fonctionnalité désactivée",
@@ -295,7 +282,6 @@
   "ai.field_content": "Contenu du message",
   "ai.no_text": "*[Aucun texte]*",
   "ai.flag_footer": "IA assistant • Les modérateurs ont le dernier mot",
-
   "cmd.stream_add.desc": "Ajouter un streamer à la liste des streamers.",
   "cmd.stream_remove.desc": "Retirer un streamer de la liste des streamers.",
   "cmd.stream_list.desc": "Afficher la liste des streamers suivis.",
@@ -317,7 +303,6 @@
   "stream.field_value": "Salon: {channel}\nRôle: {role}\nStatut: {status}",
   "stream.list_error": "❌ Erreur lors de la récupération de la liste: {error}",
   "stream.announce_desc": "**Channel** : {name} \n**Catégorie** : {category}\n **Regardez le stream ici :** {url}",
-
   "cmd.youtube_add.desc": "Ajouter une chaîne YouTube à la liste de surveillance.",
   "cmd.youtube_remove.desc": "Retirer une chaîne YouTube de la liste de surveillance.",
   "youtube.no_api": "❌ La clé API YouTube n'est pas configurée.",
@@ -346,7 +331,6 @@
   "youtube.new_video_desc": "**Chaîne** : {name}\n**Regardez la vidéo ici :** {url}",
   "youtube.new_short_title": "🎬 Nouveau short : {title}",
   "youtube.new_short_desc": "**Chaîne** : {name}\n**Regardez le short ici :** {url}",
-
   "cmd.bluesky_add.desc": "Ajouter un compte Bluesky à la liste de surveillance.",
   "cmd.bluesky_remove.desc": "Retirer un compte Bluesky de la liste de surveillance.",
   "cmd.bluesky_list.desc": "Afficher la liste des comptes Bluesky suivis.",
@@ -370,7 +354,6 @@
   "bluesky.new_post_desc": "{text}\n\n**Voir le post :** {url}",
   "bluesky.footer": "Bluesky — @{handle}",
   "bluesky.no_text": "🦋 (post sans texte)",
-
   "minigame.disabled": "🎮 **Minijeu désactivé**\n\nLes mini-jeux sont désactivés.",
   "minigame.coinflip.invalid_bet": "❌ Votre mise doit être un nombre positif.",
   "minigame.coinflip.insufficient": "❌ Vous n'avez pas assez d'argent. Votre solde: {bal}",
@@ -381,7 +364,6 @@
   "minigame.coinflip.heads": "Face",
   "minigame.common.balance": "Solde: {bal} 💰",
   "minigame.common.error": "Une erreur s'est produite.",
-
   "cmd.minigame.desc": "Commandes du système de mini-jeux",
   "cmd.minigame.enable.desc": "Activer le système de mini-jeux pour ce serveur (Admin uniquement)",
   "cmd.minigame.disable.desc": "Désactiver le système de mini-jeux pour ce serveur (Admin uniquement)",
@@ -433,7 +415,6 @@
   "cmd.duel.opponent": "Joueur à défier",
   "cmd.duel.bet": "Montant misé par chaque joueur (10-500)",
   "cmd.stats.desc": "Voir vos statistiques de captures et de duels",
-
   "minigame.common.guild_only": "Cette commande ne peut être utilisée que dans un serveur.",
   "minigame.common.error_title": "❌ Erreur",
   "minigame.common.level_up_title": "🎊 Level Up !",
@@ -583,18 +564,15 @@
   "minigame.stats.net": "Net : {net} 🪙",
   "minigame.stats.duels_field": "⚔️ Duels",
   "minigame.stats.fights": "Combats : {fights}",
-
   "mod.dm.expired_title": "🔊 Mute expiré",
   "mod.dm.expired_desc": "Votre mute sur **{guild}** a expiré.",
   "mod.dm.expired_field": "Rappel",
   "mod.dm.expired_value": "N'oubliez pas de respecter les règles du serveur.",
-
   "count.same_user": "Vous ne pouvez pas compter deux fois de suite !",
   "count.reset": "On recommence à zéro !",
   "count.reset_done": "Le compteur a été réinitialisé.",
   "count.same_number": "Vous avez mis le même chiffre ! Le bon chiffre était {expected}",
   "count.wrong_number": "Mauvais chiffre ! Le bon chiffre était {expected}, mais vous avez mis {actual}.",
-
   "errors.title": "Erreur",
   "errors.footer": "Si le problème persiste, contactez un administrateur.",
   "errors.system_footer": "Système ISROBOT",
@@ -615,5 +593,27 @@
   "errors.channel_not_found": "❌ **Canal introuvable**\nLe canal spécifié n'a pas été trouvé.",
   "errors.cooldown": "⏳ **Cooldown actif**\nVeuillez patienter {time} avant de réutiliser cette commande.",
   "errors.rate_limited": "🚫 **Limite de requêtes atteinte**\nVous avez fait trop de requêtes. Veuillez patienter {time}.",
-  "errors.unknown_error": "❌ **Erreur inattendue**\nUne erreur inattendue s'est produite. Veuillez réessayer plus tard."
+  "errors.unknown_error": "❌ **Erreur inattendue**\nUne erreur inattendue s'est produite. Veuillez réessayer plus tard.",
+  "cmd.count.channel": "Salon où se déroule le jeu du compteur",
+  "cmd.level.user": "Membre dont afficher le niveau (vous par défaut)",
+  "cmd.stream_add.streamer_name": "Nom de la chaîne Twitch",
+  "cmd.stream_add.channel": "Salon où publier les annonces",
+  "cmd.stream_add.ping_role": "Rôle à mentionner (optionnel)",
+  "cmd.stream_remove.streamer_name": "Nom de la chaîne Twitch à retirer",
+  "cmd.youtube_add.channel_id": "ID de chaîne (UC...) ou handle (@nom)",
+  "cmd.youtube_add.channel": "Salon où publier les annonces",
+  "cmd.youtube_add.notify_videos": "Annoncer les vidéos (oui par défaut)",
+  "cmd.youtube_add.notify_shorts": "Annoncer les shorts (oui par défaut)",
+  "cmd.youtube_add.ping_role": "Rôle à mentionner (optionnel)",
+  "cmd.youtube_remove.channel_name": "Nom de la chaîne YouTube à retirer",
+  "cmd.bluesky_add.account": "Handle (nom.bsky.social) ou DID du compte",
+  "cmd.bluesky_add.channel": "Salon où publier les annonces",
+  "cmd.bluesky_add.ping_role": "Rôle à mentionner (optionnel)",
+  "cmd.bluesky_remove.account": "Handle du compte à retirer",
+  "cmd.feature_enable.feature": "Fonctionnalité à activer",
+  "cmd.feature_disable.feature": "Fonctionnalité à désactiver",
+  "mod.log.field_warn_count": "Nombre d'avertissements",
+  "mod.log.field_duration": "Durée",
+  "mod.log.field_warn_count_before": "Avertissements avant",
+  "mod.log.field_warn_count_after": "Avertissements après"
 }

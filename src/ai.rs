@@ -4,7 +4,6 @@
 //! Portage de `utils/ai_provider.py`, `utils/ai_toggle.py`,
 //! `utils/ai_moderation.py` et du filtre de `commands/ai.py`.
 
-use std::env;
 use std::sync::LazyLock;
 use std::time::Duration;
 
@@ -66,7 +65,7 @@ impl std::fmt::Display for AiError {
 impl std::error::Error for AiError {}
 
 fn env_or(key: &str, default: &str) -> String {
-    env::var(key)
+    crate::config::var(key)
         .ok()
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
@@ -168,7 +167,7 @@ pub async fn chat(
     match provider().as_str() {
         "openai" => {
             let base = env_or("openai_base_url", DEFAULT_OPENAI_BASE_URL);
-            let key = env::var("openai_api_key")
+            let key = crate::config::var("openai_api_key")
                 .unwrap_or_default()
                 .trim()
                 .to_string();

@@ -14,7 +14,7 @@ use crate::tr;
 const API: &str = "https://www.googleapis.com/youtube/v3";
 
 fn api_key() -> Option<String> {
-    std::env::var("youtube_api_key")
+    crate::config::var("youtube_api_key")
         .ok()
         .filter(|v| !v.trim().is_empty())
 }
@@ -116,13 +116,13 @@ async fn channel_by_handle(
         &[("part", "id,snippet"), ("forUsername", bare)],
     )
     .await?;
-    if status == 200 {
-        if let Some(i) = first_item(&body) {
-            return Ok(Some((
-                i["id"].as_str().unwrap_or_default().into(),
-                i["snippet"]["title"].as_str().unwrap_or(handle).into(),
-            )));
-        }
+    if status == 200
+        && let Some(i) = first_item(&body)
+    {
+        return Ok(Some((
+            i["id"].as_str().unwrap_or_default().into(),
+            i["snippet"]["title"].as_str().unwrap_or(handle).into(),
+        )));
     }
     let (status, body) = get(
         http,
@@ -135,10 +135,10 @@ async fn channel_by_handle(
         ],
     )
     .await?;
-    if status == 200 {
-        if let Some(id) = first_item(&body).and_then(|i| i["snippet"]["channelId"].as_str()) {
-            return channel_by_id(http, id).await;
-        }
+    if status == 200
+        && let Some(id) = first_item(&body).and_then(|i| i["snippet"]["channelId"].as_str())
+    {
+        return channel_by_id(http, id).await;
     }
     tracing::warn!("Aucune chaîne YouTube trouvée pour le handle '{handle}'");
     Ok(None)
@@ -500,17 +500,20 @@ struct Found {
 
 /// Toutes les 10 minutes (quota API) : nouvelles vidéos et nouveaux shorts.
 pub async fn check_loop(ctx: serenity::Context, data: Data) {
-    tracing::info!("Démarrage de la boucle de vérification YouTube");
-    let mut interval = tokio::time::interval(Duration::from_secs(600));
-    loop {
-        interval.tick().await;
-        if api_key().is_none() {
-            continue;
-        }
-        if let Err(e) = check_once(&ctx, &data).await {
-            tracing::error!("[YouTube] Erreur lors de la vérification: {e:#}");
-        }
-    }
+    crate::tasks::every(
+        "YouTube",
+        Some("youtube"),
+        Duration::from_secs(600),
+        || async {
+            if api_key().is_none() {
+                return;
+            }
+            if let Err(e) = check_once(&ctx, &data).await {
+                tracing::error!("[YouTube] Erreur lors de la vérification: {e:#}");
+            }
+        },
+    )
+    .await;
 }
 
 async fn check_once(ctx: &serenity::Context, data: &Data) -> Result<(), Error> {
