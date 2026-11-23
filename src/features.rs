@@ -9,14 +9,9 @@ pub const FEATURES: &[(&str, &str)] = &[
     ("ai", "Commande IA"),
     ("coinflip", "Coinflip"),
     ("count", "Compteur"),
-    ("minigame", "Minigame"),
-    ("moderation", "Modération"),
-    ("moderation_config", "Configuration modération"),
-    ("moderation_context", "Menu contextuel modération"),
     ("ping", "Ping"),
     ("ping_bot", "Ping bot"),
     ("stream", "Streams Twitch"),
-    ("user_moderation", "Appels utilisateurs"),
     ("xp_system", "XP texte"),
     ("xp_voice", "XP vocal"),
     ("youtube", "YouTube"),
@@ -35,7 +30,6 @@ pub fn is_enabled(feature: &str) -> bool {
             enabled =
                 enabled && env_bool("AI_ENABLED", true) && env_bool("AI_COMMAND_ENABLED", true)
         }
-        "minigame" => enabled = enabled && env_bool("minigame_enabled", true),
         _ => {}
     }
     enabled

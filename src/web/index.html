@@ -107,9 +107,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     <div class="brand"><img id="bot-avatar" alt=""><span id="bot-name">ISROBOT</span></div>
     <button data-page="dashboard">Tableau de bord</button>
     <button data-page="features">Fonctionnalités</button>
-    <button data-page="moderation">Modération</button>
     <button data-page="notifications">Notifications</button>
-    <button data-page="minigame">Minijeu</button>
     <button data-page="counter">Compteur</button>
     <button data-page="leaderboard">Classement</button>
     <div class="spacer"></div>
@@ -249,66 +247,6 @@ const pages = {
       })));
   },
 
-  async moderation() {
-    const [cfg, ov] = await Promise.all([api("/moderation/config"), api("/moderation/overview")]);
-    const form = el("form", { class: "form" },
-      field("Salon des logs", channelSelect("log_channel_id", cfg.log_channel_id)),
-      field("Salon des appels", channelSelect("appeal_channel_id", cfg.appeal_channel_id)),
-      field("Salon des signalements IA", channelSelect("ai_flag_channel_id", cfg.ai_flag_channel_id)),
-      field("ID du message des règles", el("input", { type: "text", name: "rules_message_id", value: cfg.rules_message_id || "", inputmode: "numeric" }), "Utilisé par la modération IA comme contexte"),
-      field("Seuil de confiance IA (0–100)", el("input", { type: "number", name: "ai_confidence_threshold", min: 0, max: 100, value: cfg.ai_confidence_threshold })),
-      field("Modèle IA (Ollama)", el("input", { type: "text", name: "ai_model", value: cfg.ai_model })),
-      field("Hôte Ollama", el("input", { type: "text", name: "ollama_host", value: cfg.ollama_host })),
-      field("Expiration 1 avertissement (jours)", el("input", { type: "number", name: "warn_1_decay_days", min: 1, value: cfg.warn_1_decay_days })),
-      field("Expiration 2 avertissements (jours)", el("input", { type: "number", name: "warn_2_decay_days", min: 1, value: cfg.warn_2_decay_days })),
-      field("Expiration 3 avertissements (jours)", el("input", { type: "number", name: "warn_3_decay_days", min: 1, value: cfg.warn_3_decay_days })),
-      field("Mute auto à 2 avertissements (secondes)", el("input", { type: "number", name: "mute_duration_warn_2", min: 60, value: cfg.mute_duration_warn_2 })),
-      field("Mute auto à 3 avertissements (secondes)", el("input", { type: "number", name: "mute_duration_warn_3", min: 60, value: cfg.mute_duration_warn_3 })),
-      checkbox("ai_enabled", "Modération IA activée sur ce serveur", cfg.ai_enabled));
-    const save = el("button", { class: "btn", type: "button" }, "Enregistrer");
-    save.addEventListener("click", () => withBusy(save, async () => {
-      const fd = new FormData(form), body = {};
-      for (const [k, v] of fd.entries()) body[k] = (k.endsWith("_days") || k.startsWith("mute_") || k === "ai_confidence_threshold") ? Number(v) : v;
-      body.ai_enabled = form.elements.ai_enabled.checked;
-      await api("/moderation/config", { method: "PUT", body });
-      toast("Configuration de modération enregistrée");
-    }));
-
-    const action = (label, cls, fn) => { const b = el("button", { class: "btn small " + cls, type: "button" }, label); b.addEventListener("click", () => withBusy(b, fn)); return b; };
-    const reload = () => pages.moderation();
-
-    page("Modération", "Configuration et suivi des sanctions.",
-      card("Configuration", form, el("div", { class: "actions" }, save)),
-      card("Avertissements actifs", table(["Membre", { label: "Nombre", num: true }, "Depuis", ""],
-        ov.warnings.map((w) => el("tr", {}, el("td", {}, w.name), el("td", { class: "num" }, w.count), el("td", {}, fmtDate(w.since)),
-          el("td", { class: "num" }, action("Retirer 1", "secondary", async () => {
-            if (!confirm("Retirer un avertissement à " + w.name + " ?")) return;
-            const r = await api("/moderation/unwarn", { method: "POST", body: { user_id: w.user_id } });
-            toast("Avertissement retiré (reste " + r.count + ")"); reload();
-          })))), "Aucun avertissement actif.")),
-      card("Mutes en cours", table(["Membre", "Raison", "Expire", ""],
-        ov.mutes.map((m) => el("tr", {}, el("td", {}, m.name, m.auto ? el("span", { class: "badge warn" }, " auto") : null), el("td", {}, m.reason), el("td", {}, fmtDate(m.expires)),
-          el("td", { class: "num" }, action("Lever", "secondary", async () => {
-            if (!confirm("Lever le mute de " + m.name + " ?")) return;
-            await api("/moderation/unmute", { method: "POST", body: { user_id: m.user_id } });
-            toast("Mute levé"); reload();
-          })))), "Aucun mute en cours.")),
-      card("Signalements IA en attente", table(["Membre", "Catégorie", { label: "Score", num: true }, "Message", ""],
-        ov.flags.map((f) => el("tr", {}, el("td", {}, f.name, el("br"), el("small", {}, channelName(f.channel_id))), el("td", {}, f.category),
-          el("td", { class: "num" }, f.score), el("td", {}, el("div", { class: "flag-content" }, f.content), el("small", {}, f.reason)),
-          el("td", { class: "num" },
-            action("Traité", "secondary", async () => { await api("/moderation/flags/" + f.id, { method: "POST", body: { action: "reviewed" } }); reload(); }), " ",
-            action("Faux positif", "secondary", async () => { await api("/moderation/flags/" + f.id, { method: "POST", body: { action: "false_positive" } }); reload(); })))),
-        "Aucun signalement en attente.")),
-      card("Appels en attente", el("p", { class: "sub" }, "Les appels se traitent avec les boutons du salon des appels sur Discord."),
-        table(["#", "Membre", "Raison", "Date"],
-          ov.appeals.map((a) => el("tr", {}, el("td", {}, a.id), el("td", {}, a.name), el("td", {}, a.reason), el("td", {}, fmtDate(a.created)))),
-          "Aucun appel en attente.")),
-      card("Journal récent", table(["Date", "Membre", "Action", "Raison"],
-        ov.history.map((h) => el("tr", {}, el("td", {}, fmtDate(h.at)), el("td", {}, h.name), el("td", {}, h.action), el("td", {}, h.reason || "—"))),
-        "Journal vide.")));
-  },
-
   async notifications() {
     const res = await api("/notifications");
     const kinds = [
@@ -353,42 +291,20 @@ const pages = {
     page("Notifications", "Annonces automatiques des streams, vidéos et posts.", tabs, body);
   },
 
-  async minigame() {
-    const s = await api("/minigame");
-    const num = (name, label, attrs = {}) => field(label, el("input", { type: "number", name, value: s[name], ...attrs }));
-    const form = el("form", { class: "form" },
-      field("Salon du minijeu", channelSelect("minigame_channel_id", s.minigame_channel_id), "Les commandes du minijeu ne fonctionnent que dans ce salon"),
-      num("trade_tax_percent", "Taxe sur les échanges (%)", { min: 0, max: 100, step: "0.1" }),
-      num("duel_tax_percent", "Taxe sur les duels (%)", { min: 0, max: 100, step: "0.1" }),
-      num("daily_xp_transfer_cap_percent", "Plafond quotidien d'XP transférable (% de l'XP)", { min: 0, max: 100, step: "0.1" }),
-      num("daily_xp_transfer_cap_max", "Plafond quotidien d'XP transférable (max)", { min: 0 }),
-      num("capture_cooldown_seconds", "Délai entre deux captures (s)", { min: 0 }),
-      num("duel_cooldown_seconds", "Délai entre deux duels (s)", { min: 0 }),
-      el("div", {}, checkbox("minigame_enabled", "Minijeu activé sur ce serveur", s.minigame_enabled), checkbox("xp_trading_enabled", "Échanges d'XP autorisés", s.xp_trading_enabled)));
+  async counter() {
+    const c = await api("/counter");
+    const select = channelSelect("channel_id", c.channel_id);
     const save = el("button", { class: "btn", type: "button" }, "Enregistrer");
     save.addEventListener("click", () => withBusy(save, async () => {
-      const f = form.elements, body = { minigame_channel_id: f.minigame_channel_id.value || null, minigame_enabled: f.minigame_enabled.checked, xp_trading_enabled: f.xp_trading_enabled.checked };
-      for (const k of ["trade_tax_percent", "duel_tax_percent", "daily_xp_transfer_cap_percent", "daily_xp_transfer_cap_max", "capture_cooldown_seconds", "duel_cooldown_seconds"]) body[k] = Number(f[k].value);
-      await api("/minigame", { method: "PUT", body });
-      toast("Réglages du minijeu enregistrés");
+      if (c.channel_id && select.value !== c.channel_id && !confirm("Changer de salon remet le compteur à zéro. Continuer ?")) return;
+      await api("/counter", { method: "PUT", body: { channel_id: select.value || null } });
+      toast(select.value ? "Salon du compteur enregistré" : "Jeu du compteur désactivé"); pages.counter();
     }));
-    page("Minijeu", "Quêtes, boutique, échanges, captures et duels.",
-      s.global_enabled ? null : el("p", { class: "badge warn" }, "Le module Minijeu est désactivé globalement (voir Fonctionnalités)."),
-      card("Réglages", form, el("div", { class: "actions" }, save)));
-  },
-
-  async counter() {
-    const list = await api("/counter");
-    const select = channelSelect("channel_id", null, { allowNone: false });
-    const add = el("button", { class: "btn", type: "button" }, "Ajouter");
-    add.addEventListener("click", () => withBusy(add, async () => { await api("/counter", { method: "POST", body: { channel_id: select.value } }); toast("Compteur ajouté"); pages.counter(); }));
-    page("Compteur", "Salons du jeu du compteur (les membres comptent à tour de rôle).",
-      card("Salons", table(["Salon", { label: "Valeur actuelle", num: true }, ""], list.map((c) => {
-        const b = el("button", { class: "btn small danger", type: "button" }, "Retirer");
-        b.addEventListener("click", () => withBusy(b, async () => { if (!confirm("Retirer le compteur de " + channelName(c.channel_id) + " ?")) return; await api("/counter/" + c.channel_id, { method: "DELETE" }); toast("Compteur retiré"); pages.counter(); }));
-        return el("tr", {}, el("td", {}, channelName(c.channel_id)), el("td", { class: "num" }, fmtNum(c.count)), el("td", { class: "num" }, b));
-      }), "Aucun salon de comptage.")),
-      card("Ajouter un salon", el("div", { class: "form" }, field("Salon", select)), el("div", { class: "actions" }, add)));
+    page("Compteur", "Jeu du compteur : les membres comptent à tour de rôle dans un salon dédié (un seul par serveur).",
+      card("Salon", el("div", { class: "form" },
+        field("Salon du compteur", select, "« Aucun » désactive le jeu"),
+        field("Valeur actuelle", el("input", { type: "text", value: c.channel_id ? fmtNum(c.count) : "—", readonly: true }))),
+        el("div", { class: "actions" }, save)));
   },
 
   async leaderboard() {

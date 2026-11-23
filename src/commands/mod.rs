@@ -5,8 +5,6 @@ pub mod ai;
 pub mod basic;
 pub mod bluesky;
 pub mod count;
-pub mod minigame;
-pub mod moderation;
 pub mod stream;
 pub mod xp_system;
 pub mod xp_voice;
@@ -31,21 +29,6 @@ fn modules() -> Vec<(&'static str, Builder)> {
         ("xp_system", || {
             vec![xp_system::level(), xp_system::leaderboard()]
         }),
-        ("moderation", || {
-            vec![
-                moderation::warn(),
-                moderation::warns(),
-                moderation::unwarn(),
-                moderation::mute(),
-                moderation::unmute(),
-                moderation::modlog(),
-            ]
-        }),
-        ("moderation_config", || vec![moderation::modconfig()]),
-        ("moderation_context", || {
-            vec![moderation::warn_user_context()]
-        }),
-        ("user_moderation", || vec![moderation::appeal()]),
         ("stream", || {
             vec![
                 stream::stream_add(),
@@ -56,7 +39,6 @@ fn modules() -> Vec<(&'static str, Builder)> {
         ("youtube", || {
             vec![youtube::youtube_add(), youtube::youtube_remove()]
         }),
-        ("minigame", minigame::commands),
         ("bluesky", || {
             vec![
                 bluesky::bluesky_add(),
@@ -189,18 +171,6 @@ fn localize(cmd: &mut Command, path: &str) {
         let sub_path = format!("{path} {}", sub.name);
         localize(sub, &sub_path);
     }
-}
-
-/// Route les interactions de composants (boutons...) vers leur module.
-pub async fn handle_component(
-    ctx: &poise::serenity_prelude::Context,
-    data: &crate::bot::Data,
-    ci: &poise::serenity_prelude::ComponentInteraction,
-) -> Result<(), crate::bot::Error> {
-    if moderation::handle_component(ctx, data, ci).await? {
-        return Ok(());
-    }
-    Ok(())
 }
 
 #[cfg(test)]

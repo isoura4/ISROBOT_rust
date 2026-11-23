@@ -22,7 +22,6 @@ pub mod colors {
     pub const GREEN: u32 = 0x2ecc71;
     pub const ORANGE: u32 = 0xe67e22;
     pub const PURPLE: u32 = 0x9b59b6;
-    pub const LIGHT_GRAY: u32 = 0x979c9f;
     pub const BLUESKY: u32 = 0x0085ff;
 }
 
@@ -43,9 +42,8 @@ pub struct State {
     pub started: Instant,
     /// Client HTTP partagé pour les API externes (Twitch, YouTube, IA...).
     pub http: reqwest::Client,
-    /// Confirmations en attente pour les échanges d'XP faisant perdre un niveau :
-    /// (serveur, utilisateur) → (destinataire, pièces, XP, instant).
-    pub xp_confirmations: Mutex<HashMap<(u64, u64), (u64, i64, i64, Instant)>>,
+    /// Dernière question /ai par utilisateur (anti-spam).
+    pub ai_cooldowns: Mutex<HashMap<u64, Instant>>,
     /// Sessions vocales : dernier crédit d'XP par (serveur, utilisateur), en secondes epoch.
     pub voice_sessions: Mutex<HashMap<(u64, u64), i64>>,
     pub db: Db,
@@ -68,7 +66,7 @@ impl Data {
             started: Instant::now(),
             http,
             voice_sessions: Mutex::default(),
-            xp_confirmations: Mutex::default(),
+            ai_cooldowns: Mutex::default(),
             db,
             xp_cooldowns: Mutex::default(),
             counter_locks: Mutex::default(),
@@ -94,36 +92,6 @@ pub fn locale(ctx: Context<'_>) -> Option<&str> {
 
 pub fn embed(title: impl Into<String>, color: u32) -> serenity::CreateEmbed {
     serenity::CreateEmbed::new().title(title).colour(color)
-}
-
-/// Envoie un MP ; renvoie `false` si l'utilisateur n'accepte pas les MP.
-pub async fn send_dm(
-    http: impl serenity::CacheHttp,
-    user: serenity::UserId,
-    embed: serenity::CreateEmbed,
-) -> bool {
-    match user
-        .direct_message(http, serenity::CreateMessage::new().embed(embed))
-        .await
-    {
-        Ok(_) => true,
-        Err(e) => {
-            tracing::warn!("Impossible d'envoyer un MP à {user}: {e}");
-            false
-        }
-    }
-}
-
-/// Échappe le markdown Discord et neutralise les mentions (`@`, `#`).
-pub fn escape_user_content(content: &str) -> String {
-    let mut out = String::with_capacity(content.len());
-    for c in content.chars() {
-        if matches!(c, '\\' | '*' | '_' | '~' | '`' | '|' | '>' | '@' | '#') {
-            out.push('\\');
-        }
-        out.push(c);
-    }
-    out
 }
 
 /// Tronque une chaîne à `max` caractères (avec « ... »).

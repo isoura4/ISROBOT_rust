@@ -5,7 +5,7 @@ use poise::serenity_prelude as serenity;
 use rusqlite::{OptionalExtension, params};
 
 use crate::bot::{Context, Data, Error, locale};
-use crate::{quests, tr};
+use crate::tr;
 
 /// Paramétrer le salon pour le minijeu du compteur.
 #[poise::command(
@@ -22,30 +22,30 @@ pub async fn count(
     let channel_id = channel.id.to_string();
     let user_id = ctx.author().id.to_string();
 
-    let created = ctx
+    let already = ctx
         .data()
         .db
-        .run(move |c| {
-            let exists = c
-                .prepare("SELECT 1 FROM counter_game WHERE guildId = ?1 AND channelId = ?2")?
-                .exists(params![guild_id, channel_id])?;
-            if exists {
-                return Ok(false);
+        .tx(move |c| {
+            let current: Option<String> = c
+                .query_row(
+                    "SELECT channelId FROM counter_game WHERE guildId = ?1 ORDER BY rowid LIMIT 1",
+                    [&guild_id],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            if current.as_deref() == Some(channel_id.as_str()) {
+                return Ok(true);
             }
-            c.execute(
-                "INSERT INTO counter_game (guildId, channelId, messageId, userId, lastUserId, count)
-                 VALUES (?1, ?2, '', ?3, '0', 0)",
-                params![guild_id, channel_id, user_id],
-            )?;
-            Ok(true)
+            set_channel(c, &guild_id, &channel_id, &user_id)?;
+            Ok(false)
         })
         .await?;
 
     let mention = format!("<#{}>", channel.id);
-    let key = if created {
-        "count.configured"
-    } else {
+    let key = if already {
         "count.already"
+    } else {
+        "count.configured"
     };
     ctx.send(
         CreateReply::default()
@@ -53,6 +53,17 @@ pub async fn count(
             .ephemeral(true),
     )
     .await?;
+    Ok(())
+}
+
+/// Définit LE salon du compteur du serveur (un seul par serveur) ; le compteur repart de zéro.
+pub fn set_channel(conn: &rusqlite::Connection, guild: &str, channel: &str, user: &str) -> rusqlite::Result<()> {
+    conn.execute("DELETE FROM counter_game WHERE guildId = ?1", [guild])?;
+    conn.execute(
+        "INSERT INTO counter_game (guildId, channelId, messageId, userId, lastUserId, count)
+         VALUES (?1, ?2, '', ?3, '0', 0)",
+        params![guild, channel, user],
+    )?;
     Ok(())
 }
 
@@ -154,13 +165,6 @@ pub async fn on_message(
                     Ok(())
                 })
                 .await?;
-            quests::track(
-                &data.db,
-                guild_id.get(),
-                msg.author.id.get(),
-                "counting_participation",
-            )
-            .await;
             return Ok(());
         }
         Outcome::SameUser => tr!("count.same_user", None),
@@ -179,12 +183,11 @@ pub async fn on_message(
     msg.react(ctx, '❌').await?;
     msg.channel_id.say(ctx, error_text).await?;
     msg.channel_id.say(ctx, tr!("count.reset", None)).await?;
-    // Comme en Python : remise à zéro de tous les compteurs du serveur.
     data.db
         .run(move |c| {
             c.execute(
-                "UPDATE counter_game SET count = 0, lastUserId = NULL WHERE guildId = ?1",
-                params![g],
+                "UPDATE counter_game SET count = 0, lastUserId = NULL WHERE guildId = ?1 AND channelId = ?2",
+                params![g, ch],
             )?;
             Ok(())
         })
@@ -198,6 +201,23 @@ pub async fn on_message(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn one_counter_channel_per_server() {
+        let c = rusqlite::Connection::open_in_memory().unwrap();
+        c.execute_batch(include_str!("../db/schema.sql")).unwrap();
+        set_channel(&c, "g", "1", "u").unwrap();
+        c.execute("UPDATE counter_game SET count = 42", []).unwrap();
+        set_channel(&c, "g", "2", "u").unwrap();
+        let rows: Vec<(String, i64)> = c
+            .prepare("SELECT channelId, count FROM counter_game WHERE guildId = 'g'")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(rows, vec![("2".to_string(), 0)]);
+    }
 
     #[test]
     fn rules() {

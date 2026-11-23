@@ -42,7 +42,7 @@ pub fn is_healthy(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-fn copy_db(src: &Path, dest: &Path) -> Result<()> {
+pub fn copy_db(src: &Path, dest: &Path) -> Result<()> {
     let src = Connection::open(src)?;
     let mut dst = Connection::open(dest)?;
     let backup = rusqlite::backup::Backup::new(&src, &mut dst)?;
@@ -101,6 +101,13 @@ pub fn auto_recover(db: &Path, dir: &Path) -> bool {
                 if let Err(e) = std::fs::rename(db, &aside) {
                     tracing::error!("Impossible de déplacer la base corrompue: {e}");
                     return false;
+                }
+                // Les fichiers WAL/SHM de l'ancienne base ne doivent pas être rejoués sur la copie.
+                for ext in ["-wal", "-shm"] {
+                    let side = PathBuf::from(format!("{}{ext}", db.display()));
+                    if side.exists() {
+                        let _ = std::fs::rename(&side, format!("{}{ext}", aside.display()));
+                    }
                 }
                 tracing::warn!("Base corrompue conservée dans {}", aside.display());
             }

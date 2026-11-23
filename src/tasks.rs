@@ -59,17 +59,5 @@ pub fn spawn_all(ctx: serenity::Context, data: Data) {
         "bluesky",
         commands::bluesky::check_loop(ctx.clone(), data.clone()),
     );
-    spawn(
-        "warning_decay",
-        commands::moderation::warning_decay_loop(ctx.clone(), data.clone()),
-    );
-    spawn(
-        "mute_expiration",
-        commands::moderation::mute_expiration_loop(ctx.clone(), data.clone()),
-    );
-    spawn(
-        "trades",
-        commands::minigame::trade_checker_loop(data.clone()),
-    );
     spawn("backup", backup::scheduled_loop(data));
 }

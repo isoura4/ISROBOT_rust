@@ -1,8 +1,8 @@
 //! Intelligence artificielle : fournisseurs (Ollama / API compatible OpenAI),
-//! interrupteurs `AI_*`, filtre de contenu et analyse de modération.
+//! interrupteurs `AI_*` et filtre de contenu.
 //!
 //! Portage de `utils/ai_provider.py`, `utils/ai_toggle.py`,
-//! `utils/ai_moderation.py` et du filtre de `commands/ai.py`.
+//! et du filtre de `commands/ai.py`.
 
 use std::sync::LazyLock;
 use std::time::Duration;
@@ -20,7 +20,6 @@ use crate::config::env_bool;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Feature {
     Command,
-    Moderation,
     ContentFilter,
 }
 
@@ -28,7 +27,6 @@ pub enum Feature {
 pub fn enabled(feature: Feature) -> bool {
     let key = match feature {
         Feature::Command => "AI_COMMAND_ENABLED",
-        Feature::Moderation => "AI_MODERATION_ENABLED",
         Feature::ContentFilter => "AI_CONTENT_FILTER_ENABLED",
     };
     env_bool("AI_ENABLED", true) && env_bool(key, true)
@@ -311,130 +309,6 @@ pub fn contains_inappropriate_content(text: &str) -> bool {
     FILTER_PATTERNS.iter().any(|p| p.is_match(&normalized))
 }
 
-// ---------------------------------------------------------------------------
-// Analyse de modération
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Analysis {
-    pub score: i64,
-    pub category: String,
-    pub reason: String,
-}
-
-fn build_analysis_prompt(content: &str, rules: Option<&str>) -> String {
-    let content = if content.chars().count() > 1000 {
-        format!("{}...", content.chars().take(1000).collect::<String>())
-    } else {
-        content.to_string()
-    };
-    let mut prompt = String::from(
-        "You are a content moderation AI assistant for a Discord server. Your role is to help moderators identify potentially problematic messages. Be conservative and cautious - only flag messages that clearly violate rules or are harmful.\n\n",
-    );
-    if let Some(r) = rules {
-        prompt += &format!("Server Rules:\n{r}\n\n");
-    }
-    prompt += &format!(
-        r#"Message to analyze:
-"{content}"
-
-Analyze this message and provide:
-1. A confidence score (0-100) indicating how likely this message violates the rules or is harmful
-   - 0-30: No violation (normal conversation)
-   - 30-50: Borderline (might be worth reviewing)
-   - 50-70: Likely violation (should be reviewed)
-   - 70-100: Clear violation (immediate attention needed)
-
-2. A category if problematic:
-   - Toxicity (insults, aggression, negativity)
-   - Spam (repetitive, promotional, low-value content)
-   - NSFW (adult content, inappropriate material)
-   - Harassment (targeted attacks, bullying)
-   - Misinformation (false or misleading information)
-   - None (no violation detected)
-
-3. A brief reason for your assessment (one sentence)
-
-FORMAT YOUR RESPONSE EXACTLY AS:
-SCORE: [number 0-100]
-CATEGORY: [category from list above]
-REASON: [brief explanation in one sentence]
-
-Be very conservative. Most messages are normal conversation and should score below 30.
-"#
-    );
-    prompt
-}
-
-pub fn parse_analysis(response: &str) -> Option<Analysis> {
-    let mut score = None;
-    let mut category = None;
-    let mut reason = None;
-    let digits = Regex::new(r"\d+").unwrap();
-    for line in response.trim().lines().map(str::trim) {
-        if let Some(rest) = line.strip_prefix("SCORE:") {
-            score = digits
-                .find(rest)
-                .and_then(|m| m.as_str().parse::<i64>().ok());
-        } else if let Some(rest) = line.strip_prefix("CATEGORY:") {
-            category = Some(rest.trim().to_string());
-        } else if let Some(rest) = line.strip_prefix("REASON:") {
-            reason = Some(rest.trim().to_string());
-        }
-    }
-    let (Some(score), Some(mut category), Some(reason)) = (score, category, reason) else {
-        tracing::warn!(
-            "Réponse IA incomplète: {}",
-            response.chars().take(200).collect::<String>()
-        );
-        return None;
-    };
-    const VALID: [&str; 6] = [
-        "Toxicity",
-        "Spam",
-        "NSFW",
-        "Harassment",
-        "Misinformation",
-        "None",
-    ];
-    if !VALID.contains(&category.as_str()) {
-        tracing::warn!("Catégorie IA invalide: {category}");
-        category = "None".into();
-    }
-    Some(Analysis {
-        score: score.clamp(0, 100),
-        category,
-        reason,
-    })
-}
-
-/// Analyse un message ; `None` en cas d'échec (jamais bloquant).
-pub async fn analyze_message(
-    http: &reqwest::Client,
-    content: &str,
-    rules: Option<&str>,
-    model: Option<String>,
-    host: Option<String>,
-) -> Option<Analysis> {
-    let prompt = build_analysis_prompt(content, rules);
-    let ollama = provider() == "ollama";
-    let opts = ChatOptions {
-        model: model.filter(|_| ollama),
-        host: host.filter(|_| ollama),
-        temperature: Some(0.3),
-        timeout: Some(Duration::from_secs(5)),
-        ..Default::default()
-    };
-    match chat(http, json!([{ "role": "user", "content": prompt }]), opts).await {
-        Ok(Some(text)) => parse_analysis(&text),
-        Ok(None) => None,
-        Err(e) => {
-            tracing::warn!("Échec de l'analyse IA: {e}");
-            None
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -451,21 +325,6 @@ mod tests {
         assert!(!contains_inappropriate_content("numéro"));
     }
 
-    #[test]
-    fn analysis_parsing() {
-        let a = parse_analysis("SCORE: 85/100\nCATEGORY: Spam\nREASON: Pub répétée.").unwrap();
-        assert_eq!(
-            a,
-            Analysis {
-                score: 85,
-                category: "Spam".into(),
-                reason: "Pub répétée.".into()
-            }
-        );
-        let b = parse_analysis("SCORE: 150\nCATEGORY: Weird\nREASON: x").unwrap();
-        assert_eq!((b.score, b.category.as_str()), (100, "None"));
-        assert!(parse_analysis("SCORE: 10").is_none());
-    }
 
     #[test]
     fn provider_responses() {

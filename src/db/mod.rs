@@ -88,10 +88,12 @@ pub fn init(db: &Db) -> Result<()> {
     }
 
     let mut conn = db.connect()?;
+    // WAL : lectures et écritures simultanées (bot + interface web) sans « database is locked ».
+    let mode: String = conn.query_row("PRAGMA journal_mode=WAL", [], |r| r.get(0))?;
+    tracing::debug!("Mode de journal SQLite: {mode}");
     remove_corners_column(&mut conn)?;
     conn.execute_batch(SCHEMA)?;
     ensure_table_columns(&conn)?;
-    seed_defaults(&mut conn)?;
     Ok(())
 }
 
@@ -99,7 +101,8 @@ pub fn init(db: &Db) -> Result<()> {
 fn backup(path: &Path) -> Result<()> {
     let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
     let dest = PathBuf::from(format!("{}.{ts}.bak", path.display()));
-    std::fs::copy(path, &dest)?;
+    // API de sauvegarde SQLite : inclut les données encore dans le journal WAL.
+    crate::backup::copy_db(path, &dest)?;
     tracing::info!("Sauvegarde de la base créée: {}", dest.display());
     Ok(())
 }
@@ -186,233 +189,12 @@ fn ensure_table_columns(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-type QuestSeed = (
-    &'static str,
-    &'static str,
-    &'static str,
-    &'static str,
-    i64,
-    i64,
-    i64,
-    i64,
-    &'static str,
-    &'static str,
-);
-
-const DEFAULT_QUESTS: &[QuestSeed] = &[
-    (
-        "Message Master",
-        "Send 10 messages in the server",
-        "daily",
-        "messages_sent",
-        10,
-        50,
-        25,
-        0,
-        "common",
-        r#"{"channel_type": "any"}"#,
-    ),
-    (
-        "Chatter",
-        "Send 25 messages in the server",
-        "daily",
-        "messages_sent",
-        25,
-        100,
-        50,
-        0,
-        "uncommon",
-        r#"{"channel_type": "any"}"#,
-    ),
-    (
-        "Counter Helper",
-        "Participate in the counting minigame 5 times",
-        "daily",
-        "counting_participation",
-        5,
-        75,
-        30,
-        1,
-        "common",
-        r#"{"requires_counting_channel": true}"#,
-    ),
-    (
-        "Lucky Coin",
-        "Use coinflip 3 times",
-        "daily",
-        "coinflip_used",
-        3,
-        30,
-        15,
-        0,
-        "common",
-        "{}",
-    ),
-    (
-        "Capture Novice",
-        "Attempt 3 captures",
-        "random",
-        "capture_attempt",
-        3,
-        100,
-        50,
-        0,
-        "uncommon",
-        "{}",
-    ),
-    (
-        "Duel Challenger",
-        "Challenge someone to a duel",
-        "random",
-        "duel_challenge",
-        1,
-        75,
-        40,
-        0,
-        "uncommon",
-        "{}",
-    ),
-    (
-        "Big Spender",
-        "Spend 100 coins in the shop",
-        "random",
-        "coins_spent",
-        100,
-        50,
-        25,
-        0,
-        "rare",
-        "{}",
-    ),
-    (
-        "Social Butterfly",
-        "Send 50 messages",
-        "random",
-        "messages_sent",
-        50,
-        200,
-        100,
-        0,
-        "rare",
-        "{}",
-    ),
-    (
-        "Treasure Hunter",
-        "Win 200 coins from captures",
-        "random",
-        "coins_won_capture",
-        200,
-        150,
-        75,
-        0,
-        "epic",
-        "{}",
-    ),
-];
-
-const DEFAULT_SHOP_ITEMS: &[(&str, &str, i64, i64, i64, i64, &str)] = &[
-    (
-        "XP Boost (Small)",
-        "Gain 25% more XP from messages for 1 hour",
-        100,
-        0,
-        1,
-        -1,
-        r#"{"effect": "xp_boost", "multiplier": 1.25, "duration_minutes": 60}"#,
-    ),
-    (
-        "XP Boost (Large)",
-        "Gain 50% more XP from messages for 1 hour",
-        250,
-        0,
-        1,
-        -1,
-        r#"{"effect": "xp_boost", "multiplier": 1.50, "duration_minutes": 60}"#,
-    ),
-    (
-        "Capture Luck Charm",
-        "Increase capture success rate by 10% for 30 minutes",
-        150,
-        0,
-        1,
-        -1,
-        r#"{"effect": "capture_luck", "bonus": 0.10, "duration_minutes": 30}"#,
-    ),
-    (
-        "Quest Reroll Token",
-        "Reroll one of your daily quests",
-        200,
-        0,
-        1,
-        -1,
-        r#"{"effect": "quest_reroll", "uses": 1}"#,
-    ),
-    (
-        "Trade Fee Waiver",
-        "Waive tax on your next trade",
-        300,
-        0,
-        1,
-        -1,
-        r#"{"effect": "trade_fee_waiver", "uses": 1}"#,
-    ),
-    (
-        "XP Shield",
-        "Protect your XP from loss in the next failed capture",
-        100,
-        50,
-        1,
-        -1,
-        r#"{"effect": "xp_shield", "uses": 1}"#,
-    ),
-];
-
-fn seed_defaults(conn: &mut Connection) -> Result<()> {
-    let tx = conn.transaction()?;
-    let quests: i64 = tx.query_row("SELECT COUNT(*) FROM quests", [], |r| r.get(0))?;
-    if quests == 0 {
-        let mut stmt = tx.prepare(
-            "INSERT INTO quests (name, description, type, target_type, target_value,
-                reward_coins, reward_xp, allow_other_channels, rarity, metadata)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-        )?;
-        for q in DEFAULT_QUESTS {
-            stmt.execute(rusqlite::params![
-                q.0, q.1, q.2, q.3, q.4, q.5, q.6, q.7, q.8, q.9
-            ])?;
-        }
-        tracing::info!("{} quêtes par défaut insérées", DEFAULT_QUESTS.len());
-    }
-    let items: i64 = tx.query_row("SELECT COUNT(*) FROM shop_items", [], |r| r.get(0))?;
-    if items == 0 {
-        let mut stmt = tx.prepare(
-            "INSERT INTO shop_items (name, description, price_coins, price_xp, consumable, stock, metadata)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        )?;
-        for i in DEFAULT_SHOP_ITEMS {
-            stmt.execute(rusqlite::params![i.0, i.1, i.2, i.3, i.4, i.5, i.6])?;
-        }
-        tracing::info!(
-            "{} articles de boutique par défaut insérés",
-            DEFAULT_SHOP_ITEMS.len()
-        );
-    }
-    tx.commit()?;
-    Ok(())
-}
-
 /// Date/heure UTC naïve au format ISO, identique à `utcnow().isoformat()` en Python.
 pub fn utcnow_iso() -> String {
     chrono::Utc::now()
         .naive_utc()
         .format("%Y-%m-%dT%H:%M:%S%.6f")
         .to_string()
-}
-
-/// Données par défaut (quêtes, boutique) pour les tests des autres modules.
-#[cfg(test)]
-pub fn seed_for_tests(conn: &mut Connection) {
-    seed_defaults(conn).unwrap();
 }
 
 #[cfg(test)]
@@ -427,19 +209,13 @@ mod tests {
     }
 
     #[test]
-    fn init_is_idempotent_and_seeds_once() {
+    fn init_is_idempotent() {
         let db = temp_db("init");
         init(&db).unwrap();
         init(&db).unwrap();
         let conn = db.connect().unwrap();
-        let q: i64 = conn
-            .query_row("SELECT COUNT(*) FROM quests", [], |r| r.get(0))
-            .unwrap();
-        let s: i64 = conn
-            .query_row("SELECT COUNT(*) FROM shop_items", [], |r| r.get(0))
-            .unwrap();
-        assert_eq!(q, DEFAULT_QUESTS.len() as i64);
-        assert_eq!(s, DEFAULT_SHOP_ITEMS.len() as i64);
+        let n: i64 = conn.query_row("SELECT COUNT(*) FROM users", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 0);
     }
 
     #[test]

@@ -4,7 +4,7 @@ use poise::CreateReply;
 use rand::Rng;
 
 use crate::bot::{Context, Error, colors, embed, locale};
-use crate::{quests, tr};
+use crate::tr;
 
 /// Répond avec pong !
 #[poise::command(slash_command)]
@@ -35,16 +35,6 @@ pub async fn coinflip(ctx: Context<'_>) -> Result<(), Error> {
         },
         loc
     );
-
-    if let Some(guild_id) = ctx.guild_id() {
-        quests::track(
-            &ctx.data().db,
-            guild_id.get(),
-            ctx.author().id.get(),
-            "coinflip_used",
-        )
-        .await;
-    }
 
     let e = embed(tr!("coinflip.title", loc), colors::BLUE).description(tr!(
         "coinflip.result",

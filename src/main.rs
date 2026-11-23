@@ -6,14 +6,10 @@ mod bot;
 mod commands;
 mod config;
 mod db;
-mod economy;
 mod errors;
 mod features;
 mod i18n;
-mod moderation;
-mod quests;
 mod tasks;
-mod ui;
 mod web;
 mod xp;
 
@@ -204,13 +200,6 @@ async fn event_handler(
             if msg.author.bot || msg.guild_id.is_none() {
                 return Ok(());
             }
-            if let Err(e) = track_message_quest(data, msg).await {
-                tracing::error!("Erreur lors de la progression de quête (messages_sent): {e:#}");
-            }
-            // Modération IA (sans effet si désactivée ou non configurée).
-            if let Err(e) = commands::ai::moderate_message(ctx, data, msg).await {
-                tracing::error!("Erreur lors de l'analyse IA du message: {e:#}");
-            }
             if features::is_enabled("xp_system")
                 && let Err(e) = commands::xp_system::on_message(ctx, data, msg).await
             {
@@ -228,32 +217,8 @@ async fn event_handler(
                 commands::xp_voice::on_voice_state_update(ctx, data, new);
             }
         }
-        serenity::FullEvent::InteractionCreate {
-            interaction: serenity::Interaction::Component(ci),
-        } => {
-            if let Err(e) = commands::handle_component(ctx, data, ci).await {
-                tracing::error!("Erreur lors du traitement d'un composant: {e:#}");
-            }
-        }
         _ => {}
     }
     Ok(())
 }
 
-async fn track_message_quest(data: &Data, msg: &serenity::Message) -> Result<()> {
-    if msg.content.trim().is_empty() {
-        return Ok(());
-    }
-    let guild = msg.guild_id.unwrap().to_string();
-    let channel = msg.channel_id.to_string();
-    let user = msg.author.id.to_string();
-    data.db
-        .run(move |c| {
-            if !quests::is_exception_channel(c, &guild, &channel)? {
-                quests::increment_progress(c, &guild, &user, "messages_sent", 1)?;
-            }
-            Ok(())
-        })
-        .await?;
-    Ok(())
-}

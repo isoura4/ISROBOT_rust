@@ -8,12 +8,12 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use poise::serenity_prelude as serenity;
-use rusqlite::params;
+use rusqlite::{OptionalExtension, params};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
 use super::{Admin, WebState};
-use crate::{commands, config, economy, features, moderation as m};
+use crate::{commands, config, features};
 
 pub struct ApiError(StatusCode, String);
 
@@ -57,14 +57,7 @@ pub fn routes() -> Router<Arc<WebState>> {
         .route("/guild", get(guild_info))
         .route("/features", get(features_list))
         .route("/features/{key}", post(feature_toggle))
-        .route("/moderation/config", get(mod_config).put(mod_config_update))
-        .route("/moderation/overview", get(mod_overview))
-        .route("/moderation/unwarn", post(mod_unwarn))
-        .route("/moderation/unmute", post(mod_unmute))
-        .route("/moderation/flags/{id}", post(mod_flag_review))
-        .route("/minigame", get(minigame_settings).put(minigame_update))
-        .route("/counter", get(counter_list).post(counter_add))
-        .route("/counter/{channel}", delete(counter_remove))
+        .route("/counter", get(counter_get).put(counter_set))
         .route("/notifications", get(notifications))
         .route("/notifications/{kind}", post(notification_add))
         .route("/notifications/{kind}/{id}", delete(notification_remove))
@@ -244,172 +237,8 @@ async fn feature_toggle(
 }
 
 // ---------------------------------------------------------------------------
-// Modération
+// Membres et compteur
 // ---------------------------------------------------------------------------
-
-async fn mod_config(State(st): St, _a: Admin) -> ApiResult {
-    let g = guild_str(&st);
-    let c = st.data.db.run(move |c| Ok(m::get_config(c, &g)?)).await?;
-    let c = c.unwrap_or(m::ModConfig {
-        log_channel_id: None,
-        appeal_channel_id: None,
-        ai_enabled: true,
-        ai_confidence_threshold: 60,
-        ai_flag_channel_id: None,
-        ai_model: "llama2".into(),
-        ollama_host: "http://localhost:11434".into(),
-        warn_1_decay_days: 7,
-        warn_2_decay_days: 14,
-        warn_3_decay_days: 21,
-        mute_duration_warn_2: 3600,
-        mute_duration_warn_3: 86400,
-        rules_message_id: None,
-    });
-    Ok(Json(json!({
-        "log_channel_id": c.log_channel_id,
-        "appeal_channel_id": c.appeal_channel_id,
-        "ai_flag_channel_id": c.ai_flag_channel_id,
-        "ai_enabled": c.ai_enabled,
-        "ai_confidence_threshold": c.ai_confidence_threshold,
-        "ai_model": c.ai_model,
-        "ollama_host": c.ollama_host,
-        "rules_message_id": c.rules_message_id,
-        "warn_1_decay_days": c.warn_1_decay_days,
-        "warn_2_decay_days": c.warn_2_decay_days,
-        "warn_3_decay_days": c.warn_3_decay_days,
-        "mute_duration_warn_2": c.mute_duration_warn_2,
-        "mute_duration_warn_3": c.mute_duration_warn_3,
-    })))
-}
-
-fn int_in(v: &Value, field: &str, min: i64, max: i64) -> Result<i64, ApiError> {
-    let n = match v {
-        Value::Number(n) => n.as_i64(),
-        Value::String(s) => s.trim().parse().ok(),
-        _ => None,
-    };
-    n.filter(|n| (min..=max).contains(n))
-        .ok_or_else(|| ApiError::bad(format!("{field} : nombre entre {min} et {max} attendu")))
-}
-
-/// Valeur SQL validée pour un champ de configuration.
-enum Sql {
-    Null,
-    Int(i64),
-    Text(String),
-}
-
-async fn mod_config_update(
-    State(st): St,
-    admin: Admin,
-    Json(body): Json<Map<String, Value>>,
-) -> ApiResult {
-    let mut updates: Vec<(&'static str, Sql)> = Vec::new();
-    for (k, v) in &body {
-        let (col, val) = match k.as_str() {
-            "log_channel_id" => ("log_channel_id", channel_value(&st, v, k)?),
-            "appeal_channel_id" => ("appeal_channel_id", channel_value(&st, v, k)?),
-            "ai_flag_channel_id" => ("ai_flag_channel_id", channel_value(&st, v, k)?),
-            "ai_enabled" => {
-                let b = v
-                    .as_bool()
-                    .ok_or_else(|| ApiError::bad("ai_enabled : booléen attendu"))?;
-                updates.push(("ai_enabled", Sql::Int(b as i64)));
-                continue;
-            }
-            "ai_confidence_threshold" => {
-                updates.push(("ai_confidence_threshold", Sql::Int(int_in(v, k, 0, 100)?)));
-                continue;
-            }
-            "warn_1_decay_days" | "warn_2_decay_days" | "warn_3_decay_days" => {
-                let col = m::CONFIG_COLUMNS
-                    .iter()
-                    .find(|c| **c == k.as_str())
-                    .unwrap();
-                updates.push((col, Sql::Int(int_in(v, k, 1, 3650)?)));
-                continue;
-            }
-            "mute_duration_warn_2" | "mute_duration_warn_3" => {
-                let col = m::CONFIG_COLUMNS
-                    .iter()
-                    .find(|c| **c == k.as_str())
-                    .unwrap();
-                // Discord limite les timeouts à 28 jours.
-                updates.push((col, Sql::Int(int_in(v, k, 60, 28 * 86400)?)));
-                continue;
-            }
-            "ai_model" => {
-                let s = v
-                    .as_str()
-                    .map(str::trim)
-                    .filter(|s| !s.is_empty() && s.len() <= 100);
-                (
-                    "ai_model",
-                    Some(
-                        s.ok_or_else(|| ApiError::bad("ai_model : texte attendu"))?
-                            .to_string(),
-                    ),
-                )
-            }
-            "ollama_host" => {
-                let s = v.as_str().map(str::trim).filter(|s| {
-                    (s.starts_with("http://") || s.starts_with("https://")) && s.len() <= 200
-                });
-                (
-                    "ollama_host",
-                    Some(
-                        s.ok_or_else(|| ApiError::bad("ollama_host : URL http(s) attendue"))?
-                            .to_string(),
-                    ),
-                )
-            }
-            "rules_message_id" => (
-                "rules_message_id",
-                if v.is_null() || v.as_str() == Some("") {
-                    None
-                } else {
-                    Some(
-                        parse_id(v)
-                            .ok_or_else(|| ApiError::bad("rules_message_id : ID invalide"))?
-                            .to_string(),
-                    )
-                },
-            ),
-            other => return Err(ApiError::bad(format!("Paramètre inconnu : {other}"))),
-        };
-        updates.push((col, val.map(Sql::Text).unwrap_or(Sql::Null)));
-    }
-    let g = guild_str(&st);
-    let summary = updates
-        .iter()
-        .map(|(c, _)| *c)
-        .collect::<Vec<_>>()
-        .join(", ");
-    st.data
-        .db
-        .tx(move |c| {
-            c.execute(
-                "INSERT OR IGNORE INTO moderation_config (guild_id, created_at) VALUES (?1, ?2)",
-                params![g, m::now_iso()],
-            )?;
-            for (col, val) in updates {
-                // `col` provient d'une liste blanche.
-                let sql = format!("UPDATE moderation_config SET {col} = ?1 WHERE guild_id = ?2");
-                match val {
-                    Sql::Null => c.execute(&sql, params![Option::<String>::None, g])?,
-                    Sql::Int(n) => c.execute(&sql, params![n, g])?,
-                    Sql::Text(t) => c.execute(&sql, params![t, g])?,
-                };
-            }
-            Ok(())
-        })
-        .await?;
-    audit(
-        &admin,
-        &format!("configuration de modération modifiée ({summary})"),
-    );
-    mod_config(State(st), admin).await
-}
 
 /// Nom d'affichage d'un membre (cache, puis API), ou son ID.
 async fn member_name(st: &WebState, id: &str) -> String {
@@ -422,358 +251,35 @@ async fn member_name(st: &WebState, id: &str) -> String {
     }
 }
 
-async fn mod_overview(State(st): St, _a: Admin) -> ApiResult {
-    let g = guild_str(&st);
-    #[allow(clippy::type_complexity)]
-    let (warnings, mutes, appeals, history, flags): (
-        Vec<(String, i64, String)>,
-        Vec<(String, String, String, bool)>,
-        Vec<(i64, String, String, String)>,
-        Vec<m::HistoryEntry>,
-        Vec<(i64, String, String, String, i64, String, String)>,
-    ) = st
-        .data
-        .db
-        .run(move |c| {
-            let warnings = c
-                .prepare("SELECT user_id, warn_count, updated_at FROM warnings WHERE guild_id = ?1 AND warn_count > 0 ORDER BY warn_count DESC LIMIT 100")?
-                .query_map([&g], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
-                .collect::<rusqlite::Result<_>>()?;
-            let mutes = c
-                .prepare("SELECT user_id, reason, expires_at, COALESCE(is_auto, 0) FROM active_mutes WHERE guild_id = ?1 ORDER BY expires_at")?
-                .query_map([&g], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get::<_, i64>(3)? != 0)))?
-                .collect::<rusqlite::Result<_>>()?;
-            let appeals = c
-                .prepare("SELECT id, user_id, appeal_reason, created_at FROM moderation_appeals WHERE guild_id = ?1 AND status = 'pending' ORDER BY created_at")?
-                .query_map([&g], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?
-                .collect::<rusqlite::Result<_>>()?;
-            let flags = c
-                .prepare("SELECT id, user_id, channel_id, message_content, ai_score, ai_category, ai_reason FROM ai_flags WHERE guild_id = ?1 AND moderator_action = 'pending' ORDER BY ai_score DESC, created_at LIMIT 25")?
-                .query_map([&g], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?)))?
-                .collect::<rusqlite::Result<_>>()?;
-            Ok((warnings, mutes, appeals, m::history(c, &g, None, 30)?, flags))
-        })
-        .await?;
-
-    let mut w = Vec::new();
-    for (uid, count, updated) in warnings {
-        w.push(json!({ "user_id": uid, "name": member_name(&st, &uid).await, "count": count, "since": m::ts(&updated) }));
-    }
-    let mut mu = Vec::new();
-    for (uid, reason, expires, auto) in mutes {
-        mu.push(json!({ "user_id": uid, "name": member_name(&st, &uid).await, "reason": reason, "expires": m::ts(&expires), "auto": auto }));
-    }
-    let mut ap = Vec::new();
-    for (id, uid, reason, created) in appeals {
-        ap.push(json!({ "id": id, "user_id": uid, "name": member_name(&st, &uid).await, "reason": reason, "created": m::ts(&created) }));
-    }
-    let mut hi = Vec::new();
-    for h in history {
-        hi.push(json!({
-            "user_id": h.user_id,
-            "name": member_name(&st, &h.user_id).await,
-            "action": m::title_case(&h.action),
-            "reason": h.reason,
-            "at": m::ts(&h.created_at),
-        }));
-    }
-    let mut fl = Vec::new();
-    for (id, uid, ch, content, score, cat, reason) in flags {
-        fl.push(json!({
-            "id": id, "user_id": uid, "name": member_name(&st, &uid).await, "channel_id": ch,
-            "content": content, "score": score, "category": cat, "reason": reason,
-        }));
-    }
-    Ok(Json(
-        json!({ "warnings": w, "mutes": mu, "appeals": ap, "history": hi, "flags": fl }),
-    ))
-}
-
-#[derive(Deserialize)]
-struct UserBody {
-    user_id: String,
-    reason: Option<String>,
-}
-
-fn reason_or(body: &UserBody, default: &str, admin: &Admin) -> String {
-    let r = body
-        .reason
-        .as_deref()
-        .map(str::trim)
-        .filter(|r| !r.is_empty())
-        .unwrap_or(default);
-    format!("{r} (interface web, {})", admin.session.username)
-}
-
-async fn mod_unwarn(State(st): St, admin: Admin, Json(body): Json<UserBody>) -> ApiResult {
-    let uid = body
-        .user_id
-        .trim()
-        .parse::<u64>()
-        .map_err(|_| ApiError::bad("ID utilisateur invalide"))?;
-    let reason = reason_or(&body, "Retiré par un modérateur", &admin);
-    let (g, u, mo, r) = (
-        guild_str(&st),
-        uid.to_string(),
-        admin.session.user_id.to_string(),
-        reason.clone(),
-    );
-    let (new, config) = st
-        .data
-        .db
-        .run(move |c| {
-            if m::warning_count(c, &g, &u)? <= 0 {
-                return Ok(None);
-            }
-            Ok(Some((
-                m::decrement_warning(c, &g, &u, Some(&mo), Some(&r))?,
-                m::get_config(c, &g)?,
-            )))
-        })
-        .await?
-        .ok_or_else(|| ApiError::bad("Cet utilisateur n'a aucun avertissement"))?;
-    let user = serenity::UserId::new(uid);
-    let moderator = serenity::UserId::new(admin.session.user_id);
-    if new == 0 {
-        let (g, u) = (guild_str(&st), uid.to_string());
-        if st
-            .data
-            .db
-            .run(move |c| Ok(m::active_mute(c, &g, &u)?))
-            .await?
-            == Some(true)
-            && let Err(e) = m::lift_mute(
-                &st.ctx.http,
-                &st.data,
-                st.guild(),
-                user,
-                Some(moderator.to_string()),
-                reason.clone(),
-            )
-            .await
-        {
-            tracing::error!("[Web] Retrait du mute automatique impossible: {e:#}");
-        }
-    }
-    m::post_modlog(
-        &st.ctx.http,
-        config.as_ref(),
-        m::modlog_embed(
-            "unwarn",
-            user,
-            Some(moderator),
-            &[("reason", reason), ("warn_count", new.to_string())],
-            None,
-        ),
-    )
-    .await;
-    audit(
-        &admin,
-        &format!("avertissement retiré à {uid} (reste {new})"),
-    );
-    Ok(Json(json!({ "count": new })))
-}
-
-async fn mod_unmute(State(st): St, admin: Admin, Json(body): Json<UserBody>) -> ApiResult {
-    let uid = body
-        .user_id
-        .trim()
-        .parse::<u64>()
-        .map_err(|_| ApiError::bad("ID utilisateur invalide"))?;
-    let reason = reason_or(&body, "Démuté par un modérateur", &admin);
-    let user = serenity::UserId::new(uid);
-    let moderator = serenity::UserId::new(admin.session.user_id);
-    if let Err(e) = m::lift_mute(
-        &st.ctx.http,
-        &st.data,
-        st.guild(),
-        user,
-        Some(moderator.to_string()),
-        reason.clone(),
-    )
-    .await
-    {
-        // Membre parti ou permissions manquantes : on nettoie au moins la base.
-        tracing::warn!("[Web] Timeout Discord non retiré pour {uid}: {e:#}");
-        let (g, u, r) = (guild_str(&st), uid.to_string(), reason.clone());
-        st.data
-            .db
-            .run(move |c| Ok(m::remove_mute(c, &g, &u, None, &r)?))
-            .await?;
-    }
-    let config = m::load_config(&st.data, st.guild()).await;
-    m::post_modlog(
-        &st.ctx.http,
-        config.as_ref(),
-        m::modlog_embed("unmute", user, Some(moderator), &[("reason", reason)], None),
-    )
-    .await;
-    audit(&admin, &format!("mute levé pour {uid}"));
-    Ok(Json(json!({ "ok": true })))
-}
-
-#[derive(Deserialize)]
-struct FlagReview {
-    action: String,
-}
-
-async fn mod_flag_review(
-    State(st): St,
-    admin: Admin,
-    Path(id): Path<i64>,
-    Json(body): Json<FlagReview>,
-) -> ApiResult {
-    if !["reviewed", "ignored", "false_positive"].contains(&body.action.as_str()) {
-        return Err(ApiError::bad("Action invalide"));
-    }
-    let (g, mo, action) = (
-        guild_str(&st),
-        admin.session.user_id.to_string(),
-        body.action.clone(),
-    );
-    let n = st
-        .data
-        .db
-        .run(move |c| {
-            Ok(c.execute(
-                "UPDATE ai_flags SET moderator_action = ?1, moderator_id = ?2, reviewed_at = ?3 WHERE id = ?4 AND guild_id = ?5",
-                params![action, mo, m::now_iso(), id, g],
-            )?)
-        })
-        .await?;
-    if n == 0 {
-        return Err(ApiError::not_found());
-    }
-    audit(&admin, &format!("signalement IA #{id} → {}", body.action));
-    Ok(Json(json!({ "ok": true })))
-}
-
-// ---------------------------------------------------------------------------
-// Minijeu et compteur
-// ---------------------------------------------------------------------------
-
-async fn minigame_settings(State(st): St, _a: Admin) -> ApiResult {
-    let g = guild_str(&st);
-    let s = st
-        .data
-        .db
-        .tx(move |c| economy::guild_settings(c, &g))
-        .await?;
-    Ok(Json(json!({
-        "global_enabled": features::is_enabled("minigame"),
-        "minigame_enabled": s.minigame_enabled,
-        "minigame_channel_id": s.minigame_channel_id,
-        "xp_trading_enabled": s.xp_trading_enabled,
-        "trade_tax_percent": s.trade_tax_percent,
-        "duel_tax_percent": s.duel_tax_percent,
-        "daily_xp_transfer_cap_percent": s.daily_xp_transfer_cap_percent,
-        "daily_xp_transfer_cap_max": s.daily_xp_transfer_cap_max,
-        "capture_cooldown_seconds": s.capture_cooldown_seconds,
-        "duel_cooldown_seconds": s.duel_cooldown_seconds,
-    })))
-}
-
-fn percent(v: &Value, field: &str) -> Result<f64, ApiError> {
+fn int_in(v: &Value, field: &str, min: i64, max: i64) -> Result<i64, ApiError> {
     let n = match v {
-        Value::Number(n) => n.as_f64(),
-        Value::String(s) => s.trim().replace(',', ".").parse().ok(),
+        Value::Number(n) => n.as_i64(),
+        Value::String(s) => s.trim().parse().ok(),
         _ => None,
     };
-    n.filter(|n| (0.0..=100.0).contains(n))
-        .ok_or_else(|| ApiError::bad(format!("{field} : pourcentage entre 0 et 100 attendu")))
+    n.filter(|n| (min..=max).contains(n))
+        .ok_or_else(|| ApiError::bad(format!("{field} : nombre entre {min} et {max} attendu")))
 }
 
-async fn minigame_update(
-    State(st): St,
-    admin: Admin,
-    Json(body): Json<Map<String, Value>>,
-) -> ApiResult {
-    let mut updates: Vec<(&'static str, Sql)> = Vec::new();
-    for (k, v) in &body {
-        let entry = match k.as_str() {
-            "minigame_enabled" | "xp_trading_enabled" => {
-                let b = v
-                    .as_bool()
-                    .ok_or_else(|| ApiError::bad(format!("{k} : booléen attendu")))?;
-                let col = if k == "minigame_enabled" {
-                    "minigame_enabled"
-                } else {
-                    "xp_trading_enabled"
-                };
-                (col, Sql::Int(b as i64))
-            }
-            "minigame_channel_id" => (
-                "minigame_channel_id",
-                channel_value(&st, v, k)?
-                    .map(Sql::Text)
-                    .unwrap_or(Sql::Null),
-            ),
-            "trade_tax_percent" | "duel_tax_percent" | "daily_xp_transfer_cap_percent" => {
-                let col = match k.as_str() {
-                    "trade_tax_percent" => "trade_tax_percent",
-                    "duel_tax_percent" => "duel_tax_percent",
-                    _ => "daily_xp_transfer_cap_percent",
-                };
-                (col, Sql::Text(percent(v, k)?.to_string()))
-            }
-            "daily_xp_transfer_cap_max" => (
-                "daily_xp_transfer_cap_max",
-                Sql::Int(int_in(v, k, 0, 1_000_000)?),
-            ),
-            "capture_cooldown_seconds" => (
-                "capture_cooldown_seconds",
-                Sql::Int(int_in(v, k, 0, 86400)?),
-            ),
-            "duel_cooldown_seconds" => ("duel_cooldown_seconds", Sql::Int(int_in(v, k, 0, 86400)?)),
-            other => return Err(ApiError::bad(format!("Paramètre inconnu : {other}"))),
-        };
-        updates.push(entry);
-    }
+/// Salon du jeu du compteur (un seul par serveur).
+async fn counter_get(State(st): St, _a: Admin) -> ApiResult {
     let g = guild_str(&st);
-    st.data
-        .db
-        .tx(move |c| {
-            economy::guild_settings(c, &g)?;
-            for (col, val) in updates {
-                let sql = format!(
-                    "UPDATE guild_settings SET {col} = ?1, updated_at = ?2 WHERE guildId = ?3"
-                );
-                let now = crate::db::utcnow_iso();
-                match val {
-                    Sql::Null => c.execute(&sql, params![Option::<String>::None, now, g])?,
-                    Sql::Int(n) => c.execute(&sql, params![n, now, g])?,
-                    // Les pourcentages sont des REAL : on les réécrit en nombre.
-                    Sql::Text(t) => match t.parse::<f64>() {
-                        Ok(f) => c.execute(&sql, params![f, now, g])?,
-                        Err(_) => c.execute(&sql, params![t, now, g])?,
-                    },
-                };
-            }
-            Ok(())
-        })
-        .await?;
-    audit(&admin, "réglages du minijeu modifiés");
-    minigame_settings(State(st), admin).await
-}
-
-async fn counter_list(State(st): St, _a: Admin) -> ApiResult {
-    let g = guild_str(&st);
-    let rows: Vec<(String, i64)> = st
+    let row: Option<(String, i64)> = st
         .data
         .db
         .run(move |c| {
-            Ok(c.prepare(
-                "SELECT channelId, COALESCE(count, 0) FROM counter_game WHERE guildId = ?1",
-            )?
-            .query_map([g], |r| Ok((r.get(0)?, r.get(1)?)))?
-            .collect::<rusqlite::Result<_>>()?)
+            Ok(c.query_row(
+                "SELECT channelId, COALESCE(count, 0) FROM counter_game WHERE guildId = ?1 ORDER BY rowid LIMIT 1",
+                [g],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?)
         })
         .await?;
-    Ok(Json(json!(
-        rows.into_iter()
-            .map(|(ch, n)| json!({"channel_id": ch, "count": n}))
-            .collect::<Vec<_>>()
-    )))
+    Ok(Json(match row {
+        Some((ch, n)) => json!({ "channel_id": ch, "count": n }),
+        None => json!({ "channel_id": null, "count": 0 }),
+    }))
 }
 
 #[derive(Deserialize)]
@@ -781,49 +287,26 @@ struct ChannelBody {
     channel_id: Value,
 }
 
-async fn counter_add(State(st): St, admin: Admin, Json(body): Json<ChannelBody>) -> ApiResult {
-    let ch = channel_value(&st, &body.channel_id, "channel_id")?
-        .ok_or_else(|| ApiError::bad("Salon requis"))?;
-    let (g, c2, u) = (
-        guild_str(&st),
-        ch.clone(),
-        admin.session.user_id.to_string(),
-    );
-    let added = st
-        .data
+async fn counter_set(State(st): St, admin: Admin, Json(body): Json<ChannelBody>) -> ApiResult {
+    let ch = channel_value(&st, &body.channel_id, "channel_id")?;
+    let (g, c2, u) = (guild_str(&st), ch.clone(), admin.session.user_id.to_string());
+    st.data
         .db
-        .run(move |c| {
-            Ok(c.execute(
-                "INSERT OR IGNORE INTO counter_game (guildId, channelId, messageId, userId, lastUserId, count)
-                 VALUES (?1, ?2, '', ?3, '0', 0)",
-                params![g, c2, u],
-            )? > 0)
+        .tx(move |c| {
+            match c2 {
+                Some(ch) => crate::commands::count::set_channel(c, &g, &ch, &u)?,
+                None => {
+                    c.execute("DELETE FROM counter_game WHERE guildId = ?1", [&g])?;
+                }
+            }
+            Ok(())
         })
         .await?;
-    if !added {
-        return Err(ApiError::bad("Ce salon a déjà un compteur"));
-    }
-    audit(&admin, &format!("compteur ajouté dans {ch}"));
-    counter_list(State(st), admin).await
-}
-
-async fn counter_remove(State(st): St, admin: Admin, Path(channel): Path<String>) -> ApiResult {
-    let (g, ch) = (guild_str(&st), channel.clone());
-    let n = st
-        .data
-        .db
-        .run(move |c| {
-            Ok(c.execute(
-                "DELETE FROM counter_game WHERE guildId = ?1 AND channelId = ?2",
-                params![g, ch],
-            )?)
-        })
-        .await?;
-    if n == 0 {
-        return Err(ApiError::not_found());
-    }
-    audit(&admin, &format!("compteur retiré de {channel}"));
-    counter_list(State(st), admin).await
+    audit(&admin, &match &ch {
+        Some(c) => format!("salon du compteur → {c}"),
+        None => "compteur désactivé".into(),
+    });
+    counter_get(State(st), admin).await
 }
 
 // ---------------------------------------------------------------------------
