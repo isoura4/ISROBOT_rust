@@ -24,6 +24,24 @@ pub fn spawn_all(ctx: serenity::Context, data: Data) {
             commands::xp_voice::award_loop(ctx.clone(), data.clone()),
         );
     }
+    if is_enabled("stream") {
+        spawn(
+            "twitch",
+            commands::stream::check_loop(ctx.clone(), data.clone()),
+        );
+    }
+    if is_enabled("youtube") {
+        spawn(
+            "youtube",
+            commands::youtube::check_loop(ctx.clone(), data.clone()),
+        );
+    }
+    if is_enabled("bluesky") {
+        spawn(
+            "bluesky",
+            commands::bluesky::check_loop(ctx.clone(), data.clone()),
+        );
+    }
     // Les boucles de modération tournent toujours, comme en Python.
     spawn(
         "warning_decay",

@@ -2,10 +2,13 @@
 
 pub mod ai;
 pub mod basic;
+pub mod bluesky;
 pub mod count;
 pub mod moderation;
+pub mod stream;
 pub mod xp_system;
 pub mod xp_voice;
+pub mod youtube;
 
 use std::borrow::Cow;
 
@@ -41,6 +44,23 @@ fn modules() -> Vec<(&'static str, Builder)> {
             vec![moderation::warn_user_context()]
         }),
         ("user_moderation", || vec![moderation::appeal()]),
+        ("stream", || {
+            vec![
+                stream::stream_add(),
+                stream::stream_remove(),
+                stream::stream_list(),
+            ]
+        }),
+        ("youtube", || {
+            vec![youtube::youtube_add(), youtube::youtube_remove()]
+        }),
+        ("bluesky", || {
+            vec![
+                bluesky::bluesky_add(),
+                bluesky::bluesky_remove(),
+                bluesky::bluesky_list(),
+            ]
+        }),
     ]
 }
 
