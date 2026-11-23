@@ -5,8 +5,12 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.105"
+axum = "0.8"
+axum-extra = { version = "0.12", features = ["cookie"] }
 chrono = { version = "0.4.45", features = ["serde"] }
+cookie = "0.18"
 dotenvy = "0.15.7"
+hex = "0.4.3"
 poise = "0.7"
 rand = "0.8"
 regex = "1.13.2"

@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ISROBOT – Administration</title>
+<style>
+:root {
+  --bg: #f4f5f7; --panel: #ffffff; --text: #1d2129; --muted: #5d6470; --border: #dfe2e7;
+  --accent: #5865f2; --accent-text: #ffffff; --danger: #d83c3e; --ok: #23a55a; --warn: #e0a100;
+  --input: #ffffff; --shadow: 0 1px 2px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1e1f22; --panel: #2b2d31; --text: #e8e9ec; --muted: #a3a8b1; --border: #3c3f45;
+    --accent: #7289ff; --accent-text: #0e0f12; --danger: #f2585a; --ok: #3ccf7a; --warn: #f0b72f;
+    --input: #1e1f22; --shadow: none;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+a { color: var(--accent); }
+button, input, select, textarea { font: inherit; color: inherit; }
+.hidden { display: none !important; }
+.layout { display: grid; grid-template-columns: 230px 1fr; min-height: 100vh; }
+nav { background: var(--panel); border-right: 1px solid var(--border); padding: 16px 12px; display: flex; flex-direction: column; gap: 4px; }
+nav .brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 16px; font-weight: 700; }
+nav .brand img { width: 32px; height: 32px; border-radius: 50%; }
+nav button { text-align: left; background: none; border: 0; padding: 8px 12px; border-radius: 8px; cursor: pointer; color: var(--muted); }
+nav button:hover { background: var(--bg); color: var(--text); }
+nav button.active { background: var(--accent); color: var(--accent-text); }
+nav .spacer { flex: 1; }
+nav .me { display: flex; align-items: center; gap: 8px; padding: 8px; border-top: 1px solid var(--border); margin-top: 8px; font-size: 14px; }
+nav .me img { width: 28px; height: 28px; border-radius: 50%; }
+main:focus { outline: none; }
+main { padding: 24px 32px; max-width: 1100px; width: 100%; }
+h1 { font-size: 24px; margin: 0 0 4px; }
+h2 { font-size: 17px; margin: 0 0 12px; }
+.sub { color: var(--muted); margin: 0 0 20px; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; margin-bottom: 16px; box-shadow: var(--shadow); }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+.stat .label { color: var(--muted); font-size: 13px; }
+.stat .value { font-size: 22px; font-weight: 700; }
+.form { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px 20px; }
+label.field { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+label.field span.hint { color: var(--muted); font-size: 12px; }
+input[type=text], input[type=number], select, textarea { background: var(--input); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; width: 100%; }
+input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.check { display: flex; align-items: center; gap: 10px; }
+.btn { display: inline-block; text-decoration: none; background: var(--accent); color: var(--accent-text); border: 0; border-radius: 8px; padding: 8px 16px; cursor: pointer; font-weight: 600; }
+.btn.secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
+.btn.danger { background: var(--danger); color: #fff; }
+.btn.small { padding: 4px 10px; font-size: 13px; }
+.btn:disabled { opacity: .6; cursor: default; }
+.actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 13px; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.empty { color: var(--muted); padding: 8px 0; }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid var(--border); }
+.badge.on { color: var(--ok); border-color: var(--ok); }
+.badge.off { color: var(--muted); }
+.badge.warn { color: var(--warn); border-color: var(--warn); }
+.feature { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.feature:last-child { border-bottom: 0; }
+.feature code { color: var(--muted); font-size: 12px; }
+.switch { position: relative; width: 44px; height: 24px; flex: none; }
+.switch input { opacity: 0; width: 100%; height: 100%; position: absolute; margin: 0; cursor: pointer; }
+.switch span { position: absolute; inset: 0; background: var(--border); border-radius: 999px; transition: .15s; pointer-events: none; }
+.switch span::after { content: ""; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: .15s; }
+.switch input:checked + span { background: var(--ok); }
+.switch input:checked + span::after { transform: translateX(20px); }
+.switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+.tabs button { border: 1px solid var(--border); background: var(--panel); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+.tabs button.active { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+#toast { position: fixed; right: 20px; bottom: 20px; max-width: 420px; padding: 12px 16px; border-radius: 10px; background: var(--panel); border: 1px solid var(--border); box-shadow: 0 6px 20px rgba(0,0,0,.18); z-index: 10; }
+#toast.error { border-color: var(--danger); }
+#toast.success { border-color: var(--ok); }
+.login { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
+.login .card { max-width: 420px; text-align: center; padding: 32px; }
+.flag-content { white-space: pre-wrap; word-break: break-word; color: var(--muted); font-size: 13px; }
+@media (max-width: 760px) {
+  .layout { grid-template-columns: 1fr; }
+  nav { flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--border); }
+  nav .brand { width: 100%; padding-bottom: 8px; }
+  nav .spacer { display: none; }
+  nav .me { width: 100%; }
+  main { padding: 16px; }
+  .table-wrap { overflow-x: auto; }
+}
+</style>
+</head>
+<body>
+
+<div id="login" class="login hidden">
+  <div class="card">
+    <h1>ISROBOT</h1>
+    <p class="sub">Interface d'administration du bot. Connectez-vous avec votre compte Discord&nbsp;: seuls les administrateurs du serveur y ont accès.</p>
+    <a class="btn" href="/auth/login">Se connecter avec Discord</a>
+  </div>
+</div>
+
+<div id="app" class="layout hidden">
+  <nav aria-label="Sections">
+    <div class="brand"><img id="bot-avatar" alt=""><span id="bot-name">ISROBOT</span></div>
+    <button data-page="dashboard">Tableau de bord</button>
+    <button data-page="features">Fonctionnalités</button>
+    <button data-page="moderation">Modération</button>
+    <button data-page="notifications">Notifications</button>
+    <button data-page="minigame">Minijeu</button>
+    <button data-page="counter">Compteur</button>
+    <button data-page="leaderboard">Classement</button>
+    <div class="spacer"></div>
+    <div class="me"><img id="me-avatar" alt=""><span id="me-name"></span></div>
+    <button id="logout">Se déconnecter</button>
+  </nav>
+  <main id="main" tabindex="-1"></main>
+</div>
+
+<div id="toast" class="hidden" role="status" aria-live="polite"></div>
+
+<script>
+"use strict";
+let CSRF = null;
+let GUILD = { channels: [], roles: [] };
+
+// ---------- Utilitaires ----------
+function el(tag, attrs = {}, ...children) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v === null || v === undefined || v === false) continue;
+    if (k === "class") e.className = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else if (v === true) e.setAttribute(k, "");
+    else e.setAttribute(k, v);
+  }
+  for (const c of children.flat()) {
+    if (c === null || c === undefined || c === false) continue;
+    e.append(c instanceof Node ? c : document.createTextNode(String(c)));
+  }
+  return e;
+}
+const $ = (s) => document.querySelector(s);
+// replaceChildren sans les valeurs nulles (blocs optionnels).
+const fill = (node, ...children) => node.replaceChildren(...children.flat().filter((c) => c !== null && c !== undefined && c !== false));
+
+let toastTimer;
+function toast(msg, kind = "success") {
+  const t = $("#toast");
+  t.textContent = msg;
+  t.className = kind;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.add("hidden"), 4500);
+}
+
+async function api(path, opts = {}) {
+  const headers = { "Accept": "application/json" };
+  if (opts.body !== undefined) headers["Content-Type"] = "application/json";
+  if (opts.method && opts.method !== "GET") headers["X-CSRF-Token"] = CSRF;
+  const res = await fetch("/api" + path, {
+    method: opts.method || "GET",
+    headers,
+    credentials: "same-origin",
+    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+  });
+  if (res.status === 401) { showLogin(); throw new Error("Session expirée"); }
+  let data = null;
+  try { data = await res.json(); } catch (_) {}
+  if (!res.ok) throw new Error((data && data.error) || ("Erreur " + res.status));
+  return data;
+}
+
+const fmtDate = (ts) => ts ? new Date(ts * 1000).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" }) : "—";
+const fmtNum = (n) => Number(n).toLocaleString("fr-FR");
+function fmtDuration(s) {
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+  return (d ? d + " j " : "") + (h ? h + " h " : "") + m + " min";
+}
+const channelName = (id) => { const c = GUILD.channels.find((x) => x.id === id); return c ? "#" + c.name : (id ? "#" + id : "—"); };
+const roleName = (id) => { const r = GUILD.roles.find((x) => x.id === id); return r ? "@" + r.name : (id ? "@" + id : "—"); };
+
+function channelSelect(name, value, { allowNone = true } = {}) {
+  return el("select", { name },
+    allowNone ? el("option", { value: "" }, "— Aucun —") : null,
+    GUILD.channels.map((c) => el("option", { value: c.id, selected: c.id === value }, "#" + c.name)));
+}
+function roleSelect(name) {
+  return el("select", { name }, el("option", { value: "" }, "— Aucun rôle —"),
+    GUILD.roles.map((r) => el("option", { value: r.id }, "@" + r.name)));
+}
+function field(label, input, hint) {
+  return el("label", { class: "field" }, el("span", {}, label), input, hint ? el("span", { class: "hint" }, hint) : null);
+}
+function checkbox(name, label, checked) {
+  return el("label", { class: "check" }, el("input", { type: "checkbox", name, checked }), label);
+}
+function table(headers, rows, empty) {
+  if (!rows.length) return el("p", { class: "empty" }, empty);
+  return el("div", { class: "table-wrap" }, el("table", {},
+    el("thead", {}, el("tr", {}, headers.map((h) => el("th", { class: h.num ? "num" : null }, h.label || h)))),
+    el("tbody", {}, rows)));
+}
+async function withBusy(btn, fn) {
+  btn.disabled = true;
+  try { await fn(); } catch (e) { toast(e.message, "error"); } finally { btn.disabled = false; }
+}
+function card(title, ...content) { return el("section", { class: "card" }, title ? el("h2", {}, title) : null, ...content); }
+function page(title, sub, ...content) {
+  const m = $("#main");
+  fill(m, el("h1", {}, title), sub ? el("p", { class: "sub" }, sub) : null, ...content);
+}
+
+// ---------- Pages ----------
+const pages = {
+  async dashboard() {
+    const [me, feats, lb] = await Promise.all([api("/me"), api("/features"), api("/leaderboard")]);
+    const on = feats.filter((f) => f.enabled).length;
+    page("Tableau de bord", GUILD.name ? "Serveur : " + GUILD.name : null,
+      el("div", { class: "grid" },
+        stat("Bot", me.bot.name),
+        stat("En ligne depuis", fmtDuration(me.bot.uptime_seconds)),
+        stat("Membres", GUILD.member_count ? fmtNum(GUILD.member_count) : "—"),
+        stat("Fonctionnalités actives", on + " / " + feats.length)),
+      card("Top 5 XP", table(["#", "Membre", { label: "Niveau", num: true }, { label: "XP", num: true }],
+        lb.slice(0, 5).map((u, i) => el("tr", {}, el("td", {}, i + 1), el("td", {}, u.name),
+          el("td", { class: "num" }, u.level), el("td", { class: "num" }, fmtNum(u.xp)))),
+        "Aucun membre n'a encore d'XP.")),
+      card("Plateforme", el("p", {}, me.bot.platform + " · version " + me.bot.version)));
+  },
+
+  async features() {
+    const feats = await api("/features");
+    page("Fonctionnalités", "Activez ou désactivez les modules du bot. Le .env est mis à jour et les commandes Discord sont resynchronisées immédiatement.",
+      card(null, feats.map((f) => {
+        const input = el("input", { type: "checkbox", checked: f.enabled, "aria-label": f.label });
+        input.addEventListener("change", async () => {
+          input.disabled = true;
+          try {
+            const r = await api("/features/" + f.key, { method: "POST", body: { enabled: input.checked } });
+            toast(f.label + (r.enabled ? " activé" : " désactivé") + (r.synced ? "" : " (synchronisation des commandes en échec)"), r.synced ? "success" : "error");
+          } catch (e) { input.checked = !input.checked; toast(e.message, "error"); }
+          input.disabled = false;
+        });
+        return el("div", { class: "feature" },
+          el("div", {}, el("strong", {}, f.label), el("br"), el("code", {}, f.env)),
+          el("label", { class: "switch" }, input, el("span")));
+      })));
+  },
+
+  async moderation() {
+    const [cfg, ov] = await Promise.all([api("/moderation/config"), api("/moderation/overview")]);
+    const form = el("form", { class: "form" },
+      field("Salon des logs", channelSelect("log_channel_id", cfg.log_channel_id)),
+      field("Salon des appels", channelSelect("appeal_channel_id", cfg.appeal_channel_id)),
+      field("Salon des signalements IA", channelSelect("ai_flag_channel_id", cfg.ai_flag_channel_id)),
+      field("ID du message des règles", el("input", { type: "text", name: "rules_message_id", value: cfg.rules_message_id || "", inputmode: "numeric" }), "Utilisé par la modération IA comme contexte"),
+      field("Seuil de confiance IA (0–100)", el("input", { type: "number", name: "ai_confidence_threshold", min: 0, max: 100, value: cfg.ai_confidence_threshold })),
+      field("Modèle IA (Ollama)", el("input", { type: "text", name: "ai_model", value: cfg.ai_model })),
+      field("Hôte Ollama", el("input", { type: "text", name: "ollama_host", value: cfg.ollama_host })),
+      field("Expiration 1 avertissement (jours)", el("input", { type: "number", name: "warn_1_decay_days", min: 1, value: cfg.warn_1_decay_days })),
+      field("Expiration 2 avertissements (jours)", el("input", { type: "number", name: "warn_2_decay_days", min: 1, value: cfg.warn_2_decay_days })),
+      field("Expiration 3 avertissements (jours)", el("input", { type: "number", name: "warn_3_decay_days", min: 1, value: cfg.warn_3_decay_days })),
+      field("Mute auto à 2 avertissements (secondes)", el("input", { type: "number", name: "mute_duration_warn_2", min: 60, value: cfg.mute_duration_warn_2 })),
+      field("Mute auto à 3 avertissements (secondes)", el("input", { type: "number", name: "mute_duration_warn_3", min: 60, value: cfg.mute_duration_warn_3 })),
+      checkbox("ai_enabled", "Modération IA activée sur ce serveur", cfg.ai_enabled));
+    const save = el("button", { class: "btn", type: "button" }, "Enregistrer");
+    save.addEventListener("click", () => withBusy(save, async () => {
+      const fd = new FormData(form), body = {};
+      for (const [k, v] of fd.entries()) body[k] = (k.endsWith("_days") || k.startsWith("mute_") || k === "ai_confidence_threshold") ? Number(v) : v;
+      body.ai_enabled = form.elements.ai_enabled.checked;
+      await api("/moderation/config", { method: "PUT", body });
+      toast("Configuration de modération enregistrée");
+    }));
+
+    const action = (label, cls, fn) => { const b = el("button", { class: "btn small " + cls, type: "button" }, label); b.addEventListener("click", () => withBusy(b, fn)); return b; };
+    const reload = () => pages.moderation();
+
+    page("Modération", "Configuration et suivi des sanctions.",
+      card("Configuration", form, el("div", { class: "actions" }, save)),
+      card("Avertissements actifs", table(["Membre", { label: "Nombre", num: true }, "Depuis", ""],
+        ov.warnings.map((w) => el("tr", {}, el("td", {}, w.name), el("td", { class: "num" }, w.count), el("td", {}, fmtDate(w.since)),
+          el("td", { class: "num" }, action("Retirer 1", "secondary", async () => {
+            if (!confirm("Retirer un avertissement à " + w.name + " ?")) return;
+            const r = await api("/moderation/unwarn", { method: "POST", body: { user_id: w.user_id } });
+            toast("Avertissement retiré (reste " + r.count + ")"); reload();
+          })))), "Aucun avertissement actif.")),
+      card("Mutes en cours", table(["Membre", "Raison", "Expire", ""],
+        ov.mutes.map((m) => el("tr", {}, el("td", {}, m.name, m.auto ? el("span", { class: "badge warn" }, " auto") : null), el("td", {}, m.reason), el("td", {}, fmtDate(m.expires)),
+          el("td", { class: "num" }, action("Lever", "secondary", async () => {
+            if (!confirm("Lever le mute de " + m.name + " ?")) return;
+            await api("/moderation/unmute", { method: "POST", body: { user_id: m.user_id } });
+            toast("Mute levé"); reload();
+          })))), "Aucun mute en cours.")),
+      card("Signalements IA en attente", table(["Membre", "Catégorie", { label: "Score", num: true }, "Message", ""],
+        ov.flags.map((f) => el("tr", {}, el("td", {}, f.name, el("br"), el("small", {}, channelName(f.channel_id))), el("td", {}, f.category),
+          el("td", { class: "num" }, f.score), el("td", {}, el("div", { class: "flag-content" }, f.content), el("small", {}, f.reason)),
+          el("td", { class: "num" },
+            action("Traité", "secondary", async () => { await api("/moderation/flags/" + f.id, { method: "POST", body: { action: "reviewed" } }); reload(); }), " ",
+            action("Faux positif", "secondary", async () => { await api("/moderation/flags/" + f.id, { method: "POST", body: { action: "false_positive" } }); reload(); })))),
+        "Aucun signalement en attente.")),
+      card("Appels en attente", el("p", { class: "sub" }, "Les appels se traitent avec les boutons du salon des appels sur Discord."),
+        table(["#", "Membre", "Raison", "Date"],
+          ov.appeals.map((a) => el("tr", {}, el("td", {}, a.id), el("td", {}, a.name), el("td", {}, a.reason), el("td", {}, fmtDate(a.created)))),
+          "Aucun appel en attente.")),
+      card("Journal récent", table(["Date", "Membre", "Action", "Raison"],
+        ov.history.map((h) => el("tr", {}, el("td", {}, fmtDate(h.at)), el("td", {}, h.name), el("td", {}, h.action), el("td", {}, h.reason || "—"))),
+        "Journal vide.")));
+  },
+
+  async notifications() {
+    const res = await api("/notifications");
+    const kinds = [
+      { key: "twitch", label: "Twitch", target: "Nom de la chaîne Twitch", feature: "stream" },
+      { key: "youtube", label: "YouTube", target: "ID de chaîne (UC…) ou @handle", feature: "youtube" },
+      { key: "bluesky", label: "Bluesky", target: "Handle (nom.bsky.social)", feature: "bluesky" },
+    ];
+    let current = pages._notifTab || "twitch";
+    const body = el("div");
+    const tabs = el("div", { class: "tabs", role: "tablist" });
+    const render = () => {
+      const k = kinds.find((x) => x.key === current);
+      tabs.replaceChildren(...kinds.map((x) => { const b = el("button", { class: x.key === current ? "active" : "", role: "tab", type: "button" }, x.label); b.addEventListener("click", () => { current = pages._notifTab = x.key; render(); }); return b; }));
+      const rows = res.data[k.key];
+      const del = (item) => { const b = el("button", { class: "btn small danger", type: "button" }, "Supprimer"); b.addEventListener("click", () => withBusy(b, async () => {
+        if (!confirm("Supprimer cette notification ?")) return;
+        await api("/notifications/" + k.key + "/" + item.id, { method: "DELETE" }); toast("Notification supprimée"); pages.notifications();
+      })); return b; };
+      let list;
+      if (k.key === "twitch") list = table(["Chaîne", "Salon", "Rôle", "Statut", ""], rows.map((r) => el("tr", {}, el("td", {}, r.name), el("td", {}, channelName(r.channel_id)), el("td", {}, roleName(r.role_id)), el("td", {}, el("span", { class: "badge " + (r.live ? "on" : "off") }, r.live ? "En ligne" : "Hors ligne")), el("td", { class: "num" }, del(r)))), "Aucun streamer suivi.");
+      else if (k.key === "youtube") list = table(["Chaîne", "Salon", "Rôle", "Annonces", ""], rows.map((r) => el("tr", {}, el("td", {}, r.name), el("td", {}, channelName(r.channel_id)), el("td", {}, roleName(r.role_id)), el("td", {}, [r.videos ? "vidéos" : null, r.shorts ? "shorts" : null].filter(Boolean).join(", ") || "aucune"), el("td", { class: "num" }, del(r)))), "Aucune chaîne suivie.");
+      else list = table(["Compte", "Salon", "Rôle", ""], rows.map((r) => el("tr", {}, el("td", {}, (r.name || r.handle) + " (@" + r.handle + ")"), el("td", {}, channelName(r.channel_id)), el("td", {}, roleName(r.role_id)), el("td", { class: "num" }, del(r)))), "Aucun compte suivi.");
+
+      const form = el("form", { class: "form" },
+        field(k.target, el("input", { type: "text", name: "target", required: true })),
+        field("Salon des annonces", channelSelect("channel_id", null, { allowNone: false })),
+        field("Rôle à mentionner", roleSelect("role_id")),
+        k.key === "youtube" ? el("div", {}, checkbox("notify_videos", "Annoncer les vidéos", true), checkbox("notify_shorts", "Annoncer les shorts", true)) : null);
+      const add = el("button", { class: "btn", type: "submit" }, "Ajouter");
+      form.append(el("div", { class: "actions", style: "grid-column: 1 / -1" }, add));
+      form.addEventListener("submit", (ev) => { ev.preventDefault(); withBusy(add, async () => {
+        const b = { target: form.elements.target.value, channel_id: form.elements.channel_id.value, role_id: form.elements.role_id.value || null };
+        if (k.key === "youtube") { b.notify_videos = form.elements.notify_videos.checked; b.notify_shorts = form.elements.notify_shorts.checked; }
+        const r = await api("/notifications/" + k.key, { method: "POST", body: b });
+        toast(r.message); pages.notifications();
+      }); });
+      fill(body,
+        res.enabled[k.key] ? null : el("p", { class: "badge warn" }, "Module désactivé : les annonces ne partent pas (voir Fonctionnalités)."),
+        card("Suivis " + k.label, list), card("Ajouter", form));
+    };
+    render();
+    page("Notifications", "Annonces automatiques des streams, vidéos et posts.", tabs, body);
+  },
+
+  async minigame() {
+    const s = await api("/minigame");
+    const num = (name, label, attrs = {}) => field(label, el("input", { type: "number", name, value: s[name], ...attrs }));
+    const form = el("form", { class: "form" },
+      field("Salon du minijeu", channelSelect("minigame_channel_id", s.minigame_channel_id), "Les commandes du minijeu ne fonctionnent que dans ce salon"),
+      num("trade_tax_percent", "Taxe sur les échanges (%)", { min: 0, max: 100, step: "0.1" }),
+      num("duel_tax_percent", "Taxe sur les duels (%)", { min: 0, max: 100, step: "0.1" }),
+      num("daily_xp_transfer_cap_percent", "Plafond quotidien d'XP transférable (% de l'XP)", { min: 0, max: 100, step: "0.1" }),
+      num("daily_xp_transfer_cap_max", "Plafond quotidien d'XP transférable (max)", { min: 0 }),
+      num("capture_cooldown_seconds", "Délai entre deux captures (s)", { min: 0 }),
+      num("duel_cooldown_seconds", "Délai entre deux duels (s)", { min: 0 }),
+      el("div", {}, checkbox("minigame_enabled", "Minijeu activé sur ce serveur", s.minigame_enabled), checkbox("xp_trading_enabled", "Échanges d'XP autorisés", s.xp_trading_enabled)));
+    const save = el("button", { class: "btn", type: "button" }, "Enregistrer");
+    save.addEventListener("click", () => withBusy(save, async () => {
+      const f = form.elements, body = { minigame_channel_id: f.minigame_channel_id.value || null, minigame_enabled: f.minigame_enabled.checked, xp_trading_enabled: f.xp_trading_enabled.checked };
+      for (const k of ["trade_tax_percent", "duel_tax_percent", "daily_xp_transfer_cap_percent", "daily_xp_transfer_cap_max", "capture_cooldown_seconds", "duel_cooldown_seconds"]) body[k] = Number(f[k].value);
+      await api("/minigame", { method: "PUT", body });
+      toast("Réglages du minijeu enregistrés");
+    }));
+    page("Minijeu", "Quêtes, boutique, échanges, captures et duels.",
+      s.global_enabled ? null : el("p", { class: "badge warn" }, "Le module Minijeu est désactivé globalement (voir Fonctionnalités)."),
+      card("Réglages", form, el("div", { class: "actions" }, save)));
+  },
+
+  async counter() {
+    const list = await api("/counter");
+    const select = channelSelect("channel_id", null, { allowNone: false });
+    const add = el("button", { class: "btn", type: "button" }, "Ajouter");
+    add.addEventListener("click", () => withBusy(add, async () => { await api("/counter", { method: "POST", body: { channel_id: select.value } }); toast("Compteur ajouté"); pages.counter(); }));
+    page("Compteur", "Salons du jeu du compteur (les membres comptent à tour de rôle).",
+      card("Salons", table(["Salon", { label: "Valeur actuelle", num: true }, ""], list.map((c) => {
+        const b = el("button", { class: "btn small danger", type: "button" }, "Retirer");
+        b.addEventListener("click", () => withBusy(b, async () => { if (!confirm("Retirer le compteur de " + channelName(c.channel_id) + " ?")) return; await api("/counter/" + c.channel_id, { method: "DELETE" }); toast("Compteur retiré"); pages.counter(); }));
+        return el("tr", {}, el("td", {}, channelName(c.channel_id)), el("td", { class: "num" }, fmtNum(c.count)), el("td", { class: "num" }, b));
+      }), "Aucun salon de comptage.")),
+      card("Ajouter un salon", el("div", { class: "form" }, field("Salon", select)), el("div", { class: "actions" }, add)));
+  },
+
+  async leaderboard() {
+    const lb = await api("/leaderboard");
+    page("Classement", "Les 25 membres avec le plus d'XP.",
+      card(null, table(["#", "Membre", { label: "Niveau", num: true }, { label: "XP", num: true }, { label: "Messages", num: true }, { label: "Pièces", num: true }],
+        lb.map((u, i) => el("tr", {}, el("td", {}, i + 1), el("td", {}, u.name), el("td", { class: "num" }, u.level), el("td", { class: "num" }, fmtNum(u.xp)), el("td", { class: "num" }, fmtNum(u.messages)), el("td", { class: "num" }, fmtNum(u.coins)))),
+        "Aucun membre n'a encore d'XP.")));
+  },
+};
+
+function stat(label, value) { return el("div", { class: "card stat" }, el("div", { class: "label" }, label), el("div", { class: "value" }, value)); }
+
+async function go(name) {
+  if (!pages[name]) name = "dashboard";
+  document.querySelectorAll("nav button[data-page]").forEach((b) => b.classList.toggle("active", b.dataset.page === name));
+  if (location.hash !== "#" + name) history.replaceState(null, "", "#" + name);
+  $("#main").replaceChildren(el("p", { class: "sub" }, "Chargement…"));
+  try { await pages[name](); $("#main").focus(); }
+  catch (e) { $("#main").replaceChildren(el("p", { class: "sub" }, "Erreur : " + e.message)); }
+}
+
+function showLogin() { $("#app").classList.add("hidden"); $("#login").classList.remove("hidden"); }
+
+async function start() {
+  let me;
+  try {
+    const res = await fetch("/api/me", { credentials: "same-origin" });
+    if (res.status === 401) return showLogin();
+    me = await res.json();
+    if (!res.ok) throw new Error(me.error || "Erreur");
+  } catch (e) {
+    showLogin();
+    if (e.message) toast(e.message, "error");
+    return;
+  }
+  CSRF = me.csrf;
+  GUILD = await api("/guild");
+  $("#bot-name").textContent = me.bot.name;
+  if (me.bot.avatar) $("#bot-avatar").src = me.bot.avatar; else $("#bot-avatar").remove();
+  $("#me-name").textContent = me.user.name;
+  if (me.user.avatar) $("#me-avatar").src = me.user.avatar; else $("#me-avatar").remove();
+  $("#login").classList.add("hidden");
+  $("#app").classList.remove("hidden");
+  document.querySelectorAll("nav button[data-page]").forEach((b) => b.addEventListener("click", () => go(b.dataset.page)));
+  $("#logout").addEventListener("click", async () => {
+    await fetch("/auth/logout", { method: "POST", headers: { "X-CSRF-Token": CSRF }, credentials: "same-origin" });
+    location.href = "/";
+  });
+  window.addEventListener("hashchange", () => go(location.hash.slice(1)));
+  go(location.hash.slice(1) || "dashboard");
+}
+start();
+</script>
+</body>
+</html>

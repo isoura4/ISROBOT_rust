@@ -71,6 +71,35 @@ gamevox_bot_token=votre_token
 Les requêtes REST sont redirigées vers `https://bot-api.gamevox.com` ; l'URL de
 la gateway est fournie par l'API GameVox.
 
+## Interface web d'administration
+
+Le bot embarque une interface web (désactivée par défaut) pour gérer sans commandes :
+fonctionnalités, configuration de la modération, avertissements / mutes / signalements IA,
+notifications Twitch / YouTube / Bluesky, réglages du minijeu, salons du compteur et classement.
+
+**Accès** : connexion OAuth2 Discord (scope `identify` seulement), puis le bot vérifie que le
+compte est **propriétaire ou a la permission Administrateur** sur le serveur `server_id`.
+La vérification est refaite chaque minute : un admin rétrogradé perd l'accès immédiatement.
+
+Mise en place :
+
+1. Portail développeur Discord → votre application → **OAuth2** :
+   copiez le **Client Secret** et ajoutez la redirection `https://votre-domaine/auth/callback`
+   (ou `http://localhost:8080/auth/callback` en local).
+2. Dans `.env` :
+   ```env
+   WEB_ENABLED=true
+   WEB_BIND=127.0.0.1:8080
+   WEB_BASE_URL=https://votre-domaine
+   WEB_OAUTH_CLIENT_SECRET=le_client_secret
+   ```
+3. Redémarrez le bot puis ouvrez `WEB_BASE_URL`.
+
+Sécurité : le serveur écoute en local par défaut ; pour un accès distant, placez-le derrière
+un reverse proxy **HTTPS** (Caddy, Nginx...). Avec une `WEB_BASE_URL` en `https://`, les cookies
+de session sont marqués `Secure`. Les sessions sont en mémoire (perdues au redémarrage),
+toute modification exige un jeton anti-CSRF et chaque action est tracée dans les logs (`[Web]`).
+
 ## Configuration utile
 
 | Variable           | Rôle |
@@ -107,6 +136,7 @@ src/
   economy.rs         économie du minijeu (soldes, boutique, échanges, jeux)
   quests.rs          quêtes (progression, quotidiennes, récompenses, séries)
   ui.rs              modales et réponses d'interaction
+  web/               interface web : OAuth2, sessions, API JSON, page (index.html)
   xp.rs              formule XP ↔ niveau
   commands/          les commandes Discord, un fichier par module
 locales/             fr.json, en.json (mêmes clés que la version Python)

@@ -39,6 +39,8 @@ impl std::ops::Deref for Data {
 
 pub struct State {
     pub config: Config,
+    /// Instant de démarrage (affiché dans l'interface web).
+    pub started: Instant,
     /// Client HTTP partagé pour les API externes (Twitch, YouTube, IA...).
     pub http: reqwest::Client,
     /// Confirmations en attente pour les échanges d'XP faisant perdre un niveau :
@@ -63,6 +65,7 @@ impl Data {
             .expect("client HTTP");
         Self(Arc::new(State {
             config,
+            started: Instant::now(),
             http,
             voice_sessions: Mutex::default(),
             xp_confirmations: Mutex::default(),

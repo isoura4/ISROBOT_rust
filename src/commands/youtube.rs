@@ -276,8 +276,54 @@ pub async fn youtube_add(
         return reply_ephemeral(ctx, msg).await;
     }
     ctx.defer().await?;
-    let http = &ctx.data().http;
+    let role = ping_role.as_ref().map(|r| r.id.get());
+    let msg = match add_channel(
+        ctx.data(),
+        &ident,
+        channel.id.get(),
+        role,
+        notify_videos,
+        notify_shorts,
+        loc,
+    )
+    .await?
+    {
+        Ok(m) | Err(m) => m,
+    };
+    ctx.say(msg).await?;
+    if let Some(r) = ping_role {
+        ctx.say(tr!(
+            "stream.role_announce",
+            loc,
+            role = format!("<@&{}>", r.id)
+        ))
+        .await?;
+    }
+    Ok(())
+}
 
+/// Ajoute une chaîne YouTube surveillée (utilisé par /youtube_add et l'interface web).
+/// `Ok(Ok(message))` en cas de succès, `Ok(Err(message))` pour une erreur à afficher.
+pub async fn add_channel(
+    data: &Data,
+    ident: &str,
+    discord_channel: u64,
+    role: Option<u64>,
+    notify_videos: bool,
+    notify_shorts: bool,
+    loc: Option<&str>,
+) -> Result<Result<String, String>, Error> {
+    if api_key().is_none() {
+        return Ok(Err(tr!("youtube.no_api", loc)));
+    }
+    let ident = ident.trim().to_string();
+    if ident.is_empty() {
+        return Ok(Err(tr!("youtube.empty_input", loc)));
+    }
+    if let Err(msg) = validate_identifier(&ident, loc) {
+        return Ok(Err(msg));
+    }
+    let http = &data.http;
     let resolved = if ident.starts_with('@') {
         channel_by_handle(http, &ident).await
     } else {
@@ -286,25 +332,20 @@ pub async fn youtube_add(
     let (yt_id, yt_name) = match resolved {
         Ok(Some(v)) => v,
         Ok(None) => {
-            let msg = if ident.starts_with('@') {
+            return Ok(Err(if ident.starts_with('@') {
                 tr!("youtube.handle_not_found", loc, handle = ident)
             } else {
                 tr!("youtube.id_not_found", loc, id = ident)
-            };
-            ctx.say(msg).await?;
-            return Ok(());
+            }));
         }
         Err(e) => {
             tracing::warn!("Impossible de vérifier la chaîne {ident}: {e:#}");
-            ctx.say(tr!("youtube.check_error", loc, error = e.to_string()))
-                .await?;
-            return Ok(());
+            return Ok(Err(tr!("youtube.check_error", loc, error = e.to_string())));
         }
     };
 
-    let (y, ch) = (yt_id.clone(), channel.id.to_string());
-    let exists = ctx
-        .data()
+    let (y, ch) = (yt_id.clone(), discord_channel.to_string());
+    let exists = data
         .db
         .run(move |c| {
             Ok(c.prepare(
@@ -314,18 +355,13 @@ pub async fn youtube_add(
         })
         .await?;
     if exists {
-        ctx.say(tr!("youtube.already", loc, name = yt_name)).await?;
-        return Ok(());
+        return Ok(Err(tr!("youtube.already", loc, name = yt_name)));
     }
 
     // Initialise le suivi pour ne pas annoncer l'ancien contenu.
     let uploads = match latest_uploads(http, &yt_id, 5).await {
         Ok(u) => u,
-        Err(e) => {
-            ctx.say(tr!("youtube.check_error", loc, error = e.to_string()))
-                .await?;
-            return Ok(());
-        }
+        Err(e) => return Ok(Err(tr!("youtube.check_error", loc, error = e.to_string()))),
     };
     let ids: Vec<String> = uploads.iter().filter_map(video_id).collect();
     let details = video_details(http, &ids).await;
@@ -345,16 +381,15 @@ pub async fn youtube_add(
         }
     }
 
-    let (y, n, ch, role, lv, ls) = (
+    let (y, n, ch, role_s, lv, ls) = (
         yt_id.clone(),
         yt_name.clone(),
-        channel.id.to_string(),
-        ping_role.as_ref().map(|r| r.id.to_string()),
+        discord_channel.to_string(),
+        role.map(|r| r.to_string()),
         last_video.clone(),
         last_short.clone(),
     );
-    ctx.data()
-        .db
+    data.db
         .run(move |c| {
             c.execute(
                 "INSERT INTO youtube_channels (channelId, channelName, discordChannelId, roleId,
@@ -364,7 +399,7 @@ pub async fn youtube_add(
                     y,
                     n,
                     ch,
-                    role,
+                    role_s,
                     notify_videos as i64,
                     notify_shorts as i64,
                     lv,
@@ -382,17 +417,15 @@ pub async fn youtube_add(
     if notify_shorts {
         notifs.push(tr!("youtube.notif_shorts", loc));
     }
-    let mention = format!("<#{}>", channel.id);
+    let mention = format!("<#{discord_channel}>");
     if notifs.is_empty() {
-        ctx.say(tr!(
+        return Ok(Ok(tr!(
             "youtube.added_warning",
             loc,
             name = yt_name,
             channel = mention,
             notifications = tr!("youtube.notif_none", loc)
-        ))
-        .await?;
-        return Ok(());
+        )));
     }
     let mut tracking = Vec::new();
     if let Some(v) = &last_video {
@@ -414,24 +447,14 @@ pub async fn youtube_add(
     } else {
         tr!("youtube.tracking_init", loc, items = tracking.join(", "))
     };
-    ctx.say(tr!(
+    Ok(Ok(tr!(
         "youtube.added",
         loc,
         name = yt_name,
         channel = mention,
         notifications = notifs.join(", "),
         tracking = tracking
-    ))
-    .await?;
-    if let Some(r) = ping_role {
-        ctx.say(tr!(
-            "stream.role_announce",
-            loc,
-            role = format!("<@&{}>", r.id)
-        ))
-        .await?;
-    }
-    Ok(())
+    )))
 }
 
 /// Retirer une chaîne YouTube de la liste de surveillance.

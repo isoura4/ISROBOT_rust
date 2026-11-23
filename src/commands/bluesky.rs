@@ -153,10 +153,36 @@ pub async fn bluesky_add(
     if let Err(msg) = validate(&account, loc) {
         return reply_ephemeral(ctx, msg).await;
     }
-    let handle = normalize(&account);
     ctx.defer().await?;
-    let http = &ctx.data().http;
+    let role = ping_role.as_ref().map(|r| r.id.get());
+    let msg = match add_account(ctx.data(), &account, channel.id.get(), role, loc).await? {
+        Ok(m) | Err(m) => m,
+    };
+    ctx.say(msg).await?;
+    if let Some(r) = ping_role {
+        ctx.say(tr!(
+            "stream.role_announce",
+            loc,
+            role = format!("<@&{}>", r.id)
+        ))
+        .await?;
+    }
+    Ok(())
+}
 
+/// Ajoute un compte Bluesky suivi (utilisé par /bluesky_add et l'interface web).
+pub async fn add_account(
+    data: &Data,
+    account: &str,
+    discord_channel: u64,
+    role: Option<u64>,
+    loc: Option<&str>,
+) -> Result<Result<String, String>, Error> {
+    if let Err(msg) = validate(account, loc) {
+        return Ok(Err(msg));
+    }
+    let handle = normalize(account);
+    let http = &data.http;
     let init = async {
         let Some(p) = profile(http, &handle).await? else {
             return anyhow::Ok(None);
@@ -179,19 +205,12 @@ pub async fn bluesky_add(
     };
     let (actual, did, display, (last_uri, last_cid)) = match init.await {
         Ok(Some(v)) => v,
-        Ok(None) => {
-            ctx.say(tr!("bluesky.not_found", loc, account = handle))
-                .await?;
-            return Ok(());
-        }
+        Ok(None) => return Ok(Err(tr!("bluesky.not_found", loc, account = handle))),
         Err(e) => {
             tracing::warn!("Impossible d'initialiser le compte Bluesky {handle}: {e:#}");
-            ctx.say(tr!("bluesky.check_error", loc, error = e.to_string()))
-                .await?;
-            return Ok(());
+            return Ok(Err(tr!("bluesky.check_error", loc, error = e.to_string())));
         }
     };
-
     let tracking = tr!(
         if last_uri.is_some() {
             "bluesky.tracking_init"
@@ -200,14 +219,13 @@ pub async fn bluesky_add(
         },
         loc
     );
-    let (h, ch, role, dn) = (
+    let (h, ch, role_s, dn) = (
         actual.clone(),
-        channel.id.to_string(),
-        ping_role.as_ref().map(|r| r.id.to_string()),
+        discord_channel.to_string(),
+        role.map(|r| r.to_string()),
         display.clone(),
     );
-    let added = ctx
-        .data()
+    let added = data
         .db
         .run(move |c| {
             let exists = c
@@ -227,7 +245,7 @@ pub async fn bluesky_add(
                     did,
                     dn,
                     ch,
-                    role,
+                    role_s,
                     last_uri,
                     last_cid,
                     crate::db::utcnow_iso()
@@ -237,26 +255,15 @@ pub async fn bluesky_add(
         })
         .await?;
     if !added {
-        ctx.say(tr!("bluesky.already", loc, name = display)).await?;
-        return Ok(());
+        return Ok(Err(tr!("bluesky.already", loc, name = display)));
     }
-    ctx.say(tr!(
+    Ok(Ok(tr!(
         "bluesky.added",
         loc,
         name = display,
-        channel = format!("<#{}>", channel.id),
+        channel = format!("<#{discord_channel}>"),
         tracking = tracking
-    ))
-    .await?;
-    if let Some(r) = ping_role {
-        ctx.say(tr!(
-            "stream.role_announce",
-            loc,
-            role = format!("<@&{}>", r.id)
-        ))
-        .await?;
-    }
-    Ok(())
+    )))
 }
 
 struct Account {

@@ -14,6 +14,7 @@ mod moderation;
 mod quests;
 mod tasks;
 mod ui;
+mod web;
 mod xp;
 
 use std::path::PathBuf;
@@ -133,6 +134,7 @@ async fn main() -> Result<()> {
                     tracing::info!("{n} commande(s) synchronisée(s) avec le serveur");
                     let data = Data::new(config, database);
                     tasks::spawn_all(ctx.clone(), data.clone());
+                    web::spawn(ctx.clone(), data.clone());
                     Ok(data)
                 })
             }

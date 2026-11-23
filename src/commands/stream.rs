@@ -102,6 +102,56 @@ pub async fn stream_add(
     }
 }
 
+/// Ajoute un streamer suivi (utilisé par l'interface web).
+pub async fn add_streamer(
+    data: &Data,
+    streamer_name: &str,
+    discord_channel: u64,
+    role: Option<u64>,
+    loc: Option<&str>,
+) -> Result<Result<String, String>, Error> {
+    let name = streamer_name.trim().to_lowercase();
+    if name.is_empty() {
+        return Ok(Err(tr!("stream.empty_name", loc)));
+    }
+    if !is_valid_name(&name) {
+        return Ok(Err(tr!("stream.invalid_name", loc)));
+    }
+    if credentials().is_none() {
+        return Ok(Err(tr!("stream.no_creds", loc)));
+    }
+    let (n, ch, role) = (
+        name.clone(),
+        discord_channel.to_string(),
+        role.map(|r| r.to_string()),
+    );
+    let added = data
+        .db
+        .run(move |c| {
+            let exists = c
+                .prepare("SELECT 1 FROM streamers WHERE streamerName = ?1 AND streamChannelId = ?2")?
+                .exists(params![n, ch])?;
+            if !exists {
+                c.execute(
+                    "INSERT INTO streamers (streamerName, streamChannelId, roleId) VALUES (?1, ?2, ?3)",
+                    params![n, ch, role],
+                )?;
+            }
+            Ok(!exists)
+        })
+        .await?;
+    Ok(if added {
+        Ok(tr!(
+            "stream.added",
+            loc,
+            name = &name,
+            channel = format!("<#{discord_channel}>")
+        ))
+    } else {
+        Err(tr!("stream.already", loc, name = name))
+    })
+}
+
 /// Retirer un streamer de la liste des streamers.
 #[poise::command(
     slash_command,
