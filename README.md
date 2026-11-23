@@ -4,41 +4,34 @@ Portage en Rust du bot [ISROBOT_python](https://github.com/isoura4/ISROBOT_pytho
 basé sur [serenity](https://github.com/serenity-rs/serenity) et
 [poise](https://github.com/serenity-rs/poise). Compatible Discord et GameVox.
 
-Le portage se fait **module par module**. La version Rust reprend la même base
-SQLite, le même `.env` et les mêmes fichiers de traduction que la version Python :
-vous pouvez passer de l'une à l'autre sans perdre de données.
+Successeur de la version Python : il réutilise la même base SQLite, le même `.env` et
+les mêmes fichiers de traduction, on peut donc migrer sans perte de données.
 
-## Avancement du portage
-
-Tous les modules de la version Python sont portés :
+## Fonctionnalités
 
 | Module (`COG_*`) | Contenu |
 |---|---|
-| socle | `.env` (synchronisation + validation), SQLite (schéma, migrations, données par défaut), traductions fr/en, Discord **et** GameVox |
+| socle | `.env` (créé et complété automatiquement), SQLite (migrations, mode WAL, sauvegardes), traductions fr/en, Discord **et** GameVox |
 | `ping`, `ping_bot`, `coinflip` | commandes simples |
-| `count` | minijeu du compteur |
+| `count` | jeu du compteur (un salon par serveur) |
 | `xp_system`, `xp_voice` | XP texte (/level, /leaderboard), XP vocal horaire |
-| `moderation`, `moderation_config`, `moderation_context`, `user_moderation` | /warn, /warns, /unwarn, /mute, /unmute, /modlog, /modconfig, menu « Warn User », /appeal + revue par boutons, expiration automatique |
-| `ai` | /ai (Ollama ou API compatible OpenAI), filtre de contenu, modération IA des messages |
+| `ai` | /ai (Ollama ou API compatible OpenAI), filtre de contenu, délai anti-spam |
 | `stream`, `youtube`, `bluesky` | annonces Twitch, YouTube (vidéos/shorts), Bluesky |
-| `minigame` | /minigame, /daily, /quest, /shop, /inventory, /use, /trade, /wallet, /history, /capture, /duel, /stats |
-| administration | /reload, /feature_list, /feature_enable, /feature_disable, sauvegardes automatiques |
+| administration | /reload, /feature_list, /feature_enable, /feature_disable, interface web |
 
 ### Différences avec la version Python
 
+- **Retirés volontairement** : le minijeu (quêtes, boutique, objets, échanges, capture,
+  duel) et la modération (/warn, /mute, appels, modération IA), Discord proposant déjà
+  ses propres outils. Les tables correspondantes restent dans la base (aucune perte).
 - **Pas de rechargement de code à chaud** (Rust est compilé) : `/reload` relit le `.env`
   et resynchronise les commandes. Activer/désactiver un module via `/feature_*`
-  prend effet immédiatement, sans redémarrer.
+  ou l'interface web prend effet immédiatement, sans redémarrer.
 - Toutes les commandes sont déclarées sur le serveur `server_id` (instantané) ;
   les anciennes commandes globales sont retirées au démarrage.
-- Les boutons de revue des appels (`/appeal`) fonctionnent aussi après un redémarrage.
+- Compteur : un seul salon par serveur ; une erreur ne remet à zéro que ce salon.
+- Twitch : une seule requête pour 100 chaînes suivies.
 - Les logs tournent chaque jour (`LOG_BACKUP_COUNT` fichiers conservés).
-- Corrections de bugs présents dans la version Python :
-  - `/duel` échouait systématiquement (argument `metadata` inconnu) ;
-  - `/trade offer` avec de l'XP plantait (`get_xp_transfer_warning` non importé) ;
-  - `/stats` comptait deux fois chaque victoire (transactions pièces + XP) ;
-  - la restauration automatique d'une base corrompue ne pouvait pas écraser le fichier ;
-  - `AI_CONTENT_FILTER_ENABLED` est désormais réellement pris en compte par `/ai`.
 
 ## Prérequis
 
@@ -47,15 +40,47 @@ Tous les modules de la version Python sont portés :
 
 ## Installation
 
+Au premier lancement, le bot crée un `.env` complet dans son dossier courant puis s'arrête
+en indiquant les valeurs à renseigner ; les nouvelles variables sont ajoutées
+automatiquement lors des mises à jour.
+
+### Binaire précompilé
+
+Téléchargez l'archive de votre système dans les
+[Releases](https://github.com/isoura4/ISROBOT_rust/releases) (Linux, Windows, macOS),
+décompressez-la, lancez `isrobot` une première fois, remplissez `.env`, relancez.
+
+### Docker
+
 ```bash
-git clone <ce dépôt>
-cd ISROBOT_rust
-cp .env.example .env   # puis renseignez vos valeurs
+git clone https://github.com/isoura4/ISROBOT_rust && cd ISROBOT_rust
+docker compose up -d --build     # crée ./data/.env puis s'arrête
+nano data/.env                   # renseignez token, IDs...
+docker compose restart
+```
+
+`./data` contient `.env`, la base, les logs et les sauvegardes. Une image prête à l'emploi
+est aussi publiée à chaque version : `ghcr.io/isoura4/isrobot_rust`.
+
+### Service Linux (systemd)
+
+Le fichier [`deploy/isrobot.service`](deploy/isrobot.service) contient l'unité et les
+commandes d'installation (utilisateur dédié, redémarrage automatique, durcissement).
+
+### Depuis les sources
+
+```bash
 cargo run --release
 ```
 
-Au démarrage, les clés manquantes de `.env` sont ajoutées depuis `.env.example`
-(comme dans la version Python).
+### Publier une version
+
+```bash
+git tag v1.0.0 && git push origin v1.0.0
+```
+
+La CI compile les binaires Linux/Windows/macOS, les attache à la Release GitHub et publie
+l'image Docker.
 
 Pour réutiliser la base de la version Python, pointez `db_path` vers le fichier
 existant (par ex. `db_path=../ISROBOT_python/database.sqlite3`). Une copie de
@@ -74,8 +99,9 @@ la gateway est fournie par l'API GameVox.
 ## Interface web d'administration
 
 Le bot embarque une interface web (désactivée par défaut) pour gérer sans commandes :
-fonctionnalités, configuration de la modération, avertissements / mutes / signalements IA,
-notifications Twitch / YouTube / Bluesky, réglages du minijeu, salons du compteur et classement.
+fonctionnalités, notifications Twitch / YouTube / Bluesky, salon du compteur, membres & XP
+(classement, modification de l'XP, réinitialisation), sauvegardes (création, téléchargement)
+et journal des actions faites depuis l'interface.
 
 **Accès** : connexion OAuth2 Discord (scope `identify` seulement), puis le bot vérifie que le
 compte est **propriétaire ou a la permission Administrateur** sur le serveur `server_id`.
@@ -89,7 +115,7 @@ Mise en place :
 2. Dans `.env` :
    ```env
    WEB_ENABLED=true
-   WEB_BIND=127.0.0.1:8080
+   WEB_BIND=127.0.0.1:8080        # 0.0.0.0:8080 dans Docker (déjà réglé par docker-compose)
    WEB_BASE_URL=https://votre-domaine
    WEB_OAUTH_CLIENT_SECRET=le_client_secret
    ```
@@ -131,11 +157,7 @@ src/
   errors.rs          gestion globale des erreurs de commandes
   tasks.rs           tâches de fond (vérifications, expirations, sauvegardes)
   backup.rs          sauvegardes SQLite vérifiées + restauration automatique
-  moderation.rs      logique de modération (avertissements, mutes, appels)
-  ai.rs              fournisseurs IA, filtre de contenu, analyse de modération
-  economy.rs         économie du minijeu (soldes, boutique, échanges, jeux)
-  quests.rs          quêtes (progression, quotidiennes, récompenses, séries)
-  ui.rs              modales et réponses d'interaction
+  ai.rs              fournisseurs IA et filtre de contenu
   web/               interface web : OAuth2, sessions, API JSON, page (index.html)
   xp.rs              formule XP ↔ niveau
   commands/          les commandes Discord, un fichier par module

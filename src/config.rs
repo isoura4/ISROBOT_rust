@@ -45,13 +45,14 @@ fn parse_env_entries(content: &str) -> Vec<(String, String)> {
         .collect()
 }
 
-/// Ajoute dans `.env` les variables présentes dans `.env.example` mais absentes.
+/// Ajoute dans `.env` les variables présentes dans `.env.example` mais absentes
+/// (crée le `.env` complet au premier lancement).
 pub fn ensure_env_variables(root: &Path) -> Result<()> {
-    let example_path = root.join(".env.example");
+    // Le modèle est embarqué dans le binaire : la synchronisation fonctionne même
+    // si .env.example n'est pas déployé (Docker, binaire seul...).
+    let example = fs::read_to_string(root.join(".env.example"))
+        .unwrap_or_else(|_| include_str!("../.env.example").to_string());
     let env_path = root.join(".env");
-    let Ok(example) = fs::read_to_string(&example_path) else {
-        return Ok(());
-    };
 
     let existing: HashSet<String> = fs::read_to_string(&env_path)
         .map(|c| parse_env_entries(&c).into_iter().map(|(k, _)| k).collect())

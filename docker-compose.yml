@@ -1,0 +1,17 @@
+# Lancement : docker compose up -d --build
+# Le dossier ./data contient .env, la base, les logs et les sauvegardes.
+# Au premier démarrage, ./data/.env est créé avec toutes les variables :
+# remplissez-le puis redémarrez (docker compose restart).
+services:
+  isrobot:
+    build: .
+    image: isrobot:latest
+    restart: unless-stopped
+    volumes:
+      - ./data:/data
+    environment:
+      # Dans le conteneur, l'interface web doit écouter sur toutes les interfaces.
+      WEB_BIND: 0.0.0.0:8080
+    ports:
+      # Exposé uniquement en local : mettez un reverse proxy HTTPS devant.
+      - "127.0.0.1:8080:8080"
