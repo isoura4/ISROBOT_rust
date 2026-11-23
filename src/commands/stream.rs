@@ -1,5 +1,6 @@
 //! Notifications Twitch : /stream_add, /stream_remove, /stream_list et vérification périodique.
 
+use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -334,38 +335,45 @@ async fn auth_token(http: &reqwest::Client) -> anyhow::Result<String> {
     Ok(token)
 }
 
-/// Renvoie les infos du stream en cours (`None` si hors ligne).
-async fn live_stream(http: &reqwest::Client, login: &str) -> anyhow::Result<Option<Value>> {
-    let (client_id, _) =
-        credentials().ok_or_else(|| anyhow::anyhow!("Identifiants Twitch absents"))?;
+/// Streams en cours pour une liste de chaînes, indexés par login (minuscules).
+/// Une seule requête par lot de 100 chaînes (limite de l'API Helix).
+async fn live_streams(http: &reqwest::Client, logins: &[String]) -> anyhow::Result<HashMap<String, Value>> {
+    let (client_id, _) = credentials().ok_or_else(|| anyhow::anyhow!("Identifiants Twitch absents"))?;
     let token = auth_token(http).await?;
-    let data: Value = with_retry(login, || async {
-        let resp = http
-            .get("https://api.twitch.tv/helix/streams")
-            .query(&[("user_login", login)])
-            .header("Client-ID", &client_id)
-            .bearer_auth(&token)
-            .send()
-            .await
-            .map_err(|e| (true, e.into()))?;
-        let status = resp.status();
-        if status.is_server_error() {
-            return Err((true, anyhow::anyhow!("Erreur serveur Twitch: {status}")));
+    let mut live = HashMap::new();
+    for chunk in logins.chunks(100) {
+        let mut query: Vec<(&str, &str)> = chunk.iter().map(|l| ("user_login", l.as_str())).collect();
+        query.push(("first", "100"));
+        let data: Value = with_retry("les streams Twitch", || async {
+            let resp = http
+                .get("https://api.twitch.tv/helix/streams")
+                .query(&query)
+                .header("Client-ID", &client_id)
+                .bearer_auth(&token)
+                .send()
+                .await
+                .map_err(|e| (true, e.into()))?;
+            let status = resp.status();
+            if status.is_server_error() {
+                return Err((true, anyhow::anyhow!("Erreur serveur Twitch: {status}")));
+            }
+            if status.as_u16() == 401 {
+                // Jeton révoqué : on l'oublie pour le prochain cycle.
+                *TOKEN.lock().unwrap() = None;
+            }
+            if !status.is_success() {
+                return Err((false, anyhow::anyhow!("Erreur lors de la vérification des streams: {status}")));
+            }
+            resp.json::<Value>().await.map_err(|e| (true, e.into()))
+        })
+        .await?;
+        for s in data["data"].as_array().into_iter().flatten() {
+            if let Some(login) = s["user_login"].as_str() {
+                live.insert(login.to_lowercase(), s.clone());
+            }
         }
-        if status.as_u16() == 401 {
-            // Jeton révoqué : on l'oublie pour le prochain cycle.
-            *TOKEN.lock().unwrap() = None;
-        }
-        if !status.is_success() {
-            return Err((
-                false,
-                anyhow::anyhow!("Erreur lors de la vérification du statut du streamer: {status}"),
-            ));
-        }
-        resp.json::<Value>().await.map_err(|e| (true, e.into()))
-    })
-    .await?;
-    Ok(data["data"].as_array().and_then(|a| a.first()).cloned())
+    }
+    Ok(live)
 }
 
 fn announce_embed(name: &str, title: &str, category: &str) -> serenity::CreateEmbed {
@@ -412,16 +420,17 @@ async fn check_once(ctx: &serenity::Context, data: &Data) -> Result<(), Error> {
         })
         .await?;
     tracing::debug!("[Twitch] Vérification de {} streamer(s)", streamers.len());
+    if streamers.is_empty() {
+        return Ok(());
+    }
+    let mut logins: Vec<String> = streamers.iter().map(|s| s.1.to_lowercase()).collect();
+    logins.sort();
+    logins.dedup();
+    // En cas d'échec, on ne touche à aucun statut (pas de fausse fin de stream).
+    let live = live_streams(&data.http, &logins).await?;
 
     for (id, name, channel, role, announced) in streamers {
-        let live = match live_stream(&data.http, &name).await {
-            Ok(l) => l,
-            Err(e) => {
-                tracing::error!("Erreur lors de la vérification du streamer {name}: {e:#}");
-                continue;
-            }
-        };
-        match (live, announced) {
+        match (live.get(&name.to_lowercase()).cloned(), announced) {
             (Some(info), 0) => {
                 let Some(ch) = channel.and_then(|c| c.parse::<u64>().ok()) else {
                     continue;
