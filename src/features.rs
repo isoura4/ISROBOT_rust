@@ -25,12 +25,8 @@ pub fn feature_env_key(feature: &str) -> String {
 /// Indique si une fonctionnalité est activée (défaut : activée).
 pub fn is_enabled(feature: &str) -> bool {
     let mut enabled = env_bool(&feature_env_key(feature), true);
-    match feature {
-        "ai" => {
-            enabled =
-                enabled && env_bool("AI_ENABLED", true) && env_bool("AI_COMMAND_ENABLED", true)
-        }
-        _ => {}
+    if feature == "ai" {
+        enabled = enabled && env_bool("AI_ENABLED", true) && env_bool("AI_COMMAND_ENABLED", true);
     }
     enabled
 }

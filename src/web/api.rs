@@ -10,7 +10,7 @@ use axum::{Json, Router};
 use poise::serenity_prelude as serenity;
 use rusqlite::{OptionalExtension, params};
 use serde::Deserialize;
-use serde_json::{Map, Value, json};
+use serde_json::{Value, json};
 
 use super::{Admin, WebState};
 use crate::{commands, config, features};
@@ -62,18 +62,42 @@ pub fn routes() -> Router<Arc<WebState>> {
         .route("/notifications/{kind}", post(notification_add))
         .route("/notifications/{kind}/{id}", delete(notification_remove))
         .route("/leaderboard", get(leaderboard))
+        .route(
+            "/members/{id}",
+            get(member_get).put(member_update).delete(member_reset),
+        )
+        .route("/audit", get(audit_log))
+        .route("/backups", get(backups_list).post(backup_create))
+        .route("/backups/{name}", get(backup_download))
 }
 
 fn guild_str(st: &WebState) -> String {
     st.data.config.server_id.to_string()
 }
 
-fn audit(admin: &Admin, action: &str) {
-    tracing::info!(
-        "[Web] {} ({}) : {action}",
-        admin.session.username,
-        admin.session.user_id
+/// Trace une action dans les logs et dans le journal persistant (`web_audit_log`).
+fn audit(st: &WebState, admin: &Admin, action: &str) {
+    let (uid, name, action) = (
+        admin.session.user_id.to_string(),
+        admin.session.username.clone(),
+        action.to_string(),
     );
+    tracing::info!("[Web] {name} ({uid}) : {action}");
+    let db = st.data.db.clone();
+    tokio::spawn(async move {
+        let r = db
+            .run(move |c| {
+                c.execute(
+                    "INSERT INTO web_audit_log (user_id, username, action, created_at) VALUES (?1, ?2, ?3, ?4)",
+                    params![uid, name, action, chrono::Utc::now().to_rfc3339()],
+                )?;
+                Ok(())
+            })
+            .await;
+        if let Err(e) = r {
+            tracing::error!("[Web] Journal d'audit non enregistré: {e:#}");
+        }
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -227,7 +251,11 @@ async fn feature_toggle(
         if body.enabled { "true" } else { "false" },
     )
     .map_err(|e| anyhow::anyhow!(e))?;
-    audit(&admin, &format!("fonctionnalité {key} → {}", body.enabled));
+    audit(
+        &st,
+        &admin,
+        &format!("fonctionnalité {key} → {}", body.enabled),
+    );
     let synced = commands::sync(&st.ctx.http, &commands::all(), st.guild())
         .await
         .is_ok();
@@ -289,7 +317,11 @@ struct ChannelBody {
 
 async fn counter_set(State(st): St, admin: Admin, Json(body): Json<ChannelBody>) -> ApiResult {
     let ch = channel_value(&st, &body.channel_id, "channel_id")?;
-    let (g, c2, u) = (guild_str(&st), ch.clone(), admin.session.user_id.to_string());
+    let (g, c2, u) = (
+        guild_str(&st),
+        ch.clone(),
+        admin.session.user_id.to_string(),
+    );
     st.data
         .db
         .tx(move |c| {
@@ -302,10 +334,14 @@ async fn counter_set(State(st): St, admin: Admin, Json(body): Json<ChannelBody>)
             Ok(())
         })
         .await?;
-    audit(&admin, &match &ch {
-        Some(c) => format!("salon du compteur → {c}"),
-        None => "compteur désactivé".into(),
-    });
+    audit(
+        &st,
+        &admin,
+        &match &ch {
+            Some(c) => format!("salon du compteur → {c}"),
+            None => "compteur désactivé".into(),
+        },
+    );
     counter_get(State(st), admin).await
 }
 
@@ -419,6 +455,7 @@ async fn notification_add(
     match result {
         Ok(msg) => {
             audit(
+                &st,
                 &admin,
                 &format!("notification {kind} ajoutée : {}", b.target.trim()),
             );
@@ -447,7 +484,7 @@ async fn notification_remove(
     if n == 0 {
         return Err(ApiError::not_found());
     }
-    audit(&admin, &format!("notification {kind} #{id} supprimée"));
+    audit(&st, &admin, &format!("notification {kind} #{id} supprimée"));
     Ok(Json(json!({ "ok": true })))
 }
 
@@ -477,4 +514,227 @@ async fn leaderboard(State(st): St, _a: Admin) -> ApiResult {
         }));
     }
     Ok(Json(json!(out)))
+}
+
+// ---------------------------------------------------------------------------
+// Membres : consultation et modification de l'XP
+// ---------------------------------------------------------------------------
+
+fn member_id(id: &str) -> Result<u64, ApiError> {
+    id.trim()
+        .parse::<u64>()
+        .ok()
+        .filter(|n| *n > 0)
+        .ok_or_else(|| ApiError::bad("ID de membre invalide"))
+}
+
+async fn member_get(State(st): St, _a: Admin, Path(id): Path<String>) -> ApiResult {
+    let uid = member_id(&id)?;
+    let (g, u) = (guild_str(&st), uid.to_string());
+    let row: Option<(f64, i64, i64)> = st
+        .data
+        .db
+        .run(move |c| {
+            Ok(c.query_row(
+                "SELECT COALESCE(xp, 0), COALESCE(level, 1), COALESCE(messages, 0) FROM users WHERE guildId = ?1 AND userId = ?2",
+                params![g, u],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .optional()?)
+        })
+        .await?;
+    let (xp, level, messages) = row.unwrap_or((0.0, 1, 0));
+    Ok(Json(json!({
+        "user_id": uid.to_string(),
+        "name": member_name(&st, &uid.to_string()).await,
+        "xp": xp.round(), "level": level, "messages": messages,
+        "exists": row.is_some(),
+    })))
+}
+
+#[derive(Deserialize)]
+struct XpBody {
+    xp: Value,
+}
+
+async fn member_update(
+    State(st): St,
+    admin: Admin,
+    Path(id): Path<String>,
+    Json(b): Json<XpBody>,
+) -> ApiResult {
+    let uid = member_id(&id)?;
+    let xp = int_in(&b.xp, "xp", 0, 100_000_000)?;
+    let level = crate::xp::level_from_xp(xp as f64);
+    let (g, u) = (guild_str(&st), uid.to_string());
+    st.data
+        .db
+        .run(move |c| {
+            c.execute(
+                "INSERT INTO users (guildId, userId, xp, level, messages, coins) VALUES (?1, ?2, ?3, ?4, 0, 0)
+                 ON CONFLICT(guildId, userId) DO UPDATE SET xp = ?3, level = ?4",
+                params![g, u, xp as f64, level],
+            )?;
+            Ok(())
+        })
+        .await?;
+    audit(
+        &st,
+        &admin,
+        &format!("XP de {uid} fixée à {xp} (niveau {level})"),
+    );
+    member_get(State(st), admin, Path(id)).await
+}
+
+async fn member_reset(State(st): St, admin: Admin, Path(id): Path<String>) -> ApiResult {
+    let uid = member_id(&id)?;
+    let (g, u) = (guild_str(&st), uid.to_string());
+    let n = st
+        .data
+        .db
+        .run(move |c| {
+            Ok(c.execute(
+                "DELETE FROM users WHERE guildId = ?1 AND userId = ?2",
+                params![g, u],
+            )?)
+        })
+        .await?;
+    if n == 0 {
+        return Err(ApiError::not_found());
+    }
+    audit(&st, &admin, &format!("progression de {uid} réinitialisée"));
+    Ok(Json(json!({ "ok": true })))
+}
+
+// ---------------------------------------------------------------------------
+// Journal des actions web
+// ---------------------------------------------------------------------------
+
+async fn audit_log(State(st): St, _a: Admin) -> ApiResult {
+    let rows: Vec<Value> = st
+        .data
+        .db
+        .run(|c| {
+            Ok(c.prepare("SELECT username, user_id, action, created_at FROM web_audit_log ORDER BY id DESC LIMIT 200")?
+                .query_map([], |r| {
+                    let at: String = r.get(3)?;
+                    Ok(json!({
+                        "name": r.get::<_, String>(0)?,
+                        "user_id": r.get::<_, String>(1)?,
+                        "action": r.get::<_, String>(2)?,
+                        "at": chrono::DateTime::parse_from_rfc3339(&at).map(|d| d.timestamp()).unwrap_or(0),
+                    }))
+                })?
+                .collect::<rusqlite::Result<_>>()?)
+        })
+        .await?;
+    Ok(Json(json!(rows)))
+}
+
+// ---------------------------------------------------------------------------
+// Sauvegardes
+// ---------------------------------------------------------------------------
+
+/// Nom de fichier de sauvegarde valide (empêche toute sortie du dossier).
+fn valid_backup_name(name: &str) -> bool {
+    let Some(rest) = name
+        .strip_prefix("db_backup_")
+        .and_then(|r| r.strip_suffix(".sqlite3"))
+    else {
+        return false;
+    };
+    rest.len() == 15
+        && rest
+            .chars()
+            .enumerate()
+            .all(|(i, c)| if i == 8 { c == '_' } else { c.is_ascii_digit() })
+}
+
+async fn backups_list(State(st): St, _a: Admin) -> ApiResult {
+    let dir = crate::backup::backup_dir(&st.data.config.root);
+    let list = tokio::task::spawn_blocking(move || {
+        crate::backup::backups(&dir, crate::backup::PREFIX)
+            .into_iter()
+            .filter_map(|p| {
+                let meta = p.metadata().ok()?;
+                let name = p.file_name()?.to_string_lossy().to_string();
+                let at = meta
+                    .modified()
+                    .ok()?
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .ok()?
+                    .as_secs();
+                Some(json!({ "name": name, "size": meta.len(), "at": at }))
+            })
+            .collect::<Vec<_>>()
+    })
+    .await
+    .map_err(|e| anyhow::anyhow!(e))?;
+    Ok(Json(json!(list)))
+}
+
+async fn backup_create(State(st): St, admin: Admin) -> ApiResult {
+    let db = st.data.db.path().to_path_buf();
+    let dir = crate::backup::backup_dir(&st.data.config.root);
+    let path = tokio::task::spawn_blocking(move || {
+        crate::backup::backup_database(&db, &dir, crate::backup::PREFIX)
+    })
+    .await
+    .map_err(|e| anyhow::anyhow!(e))??;
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+    audit(&st, &admin, &format!("sauvegarde créée : {name}"));
+    Ok(Json(json!({ "name": name })))
+}
+
+async fn backup_download(
+    State(st): St,
+    admin: Admin,
+    Path(name): Path<String>,
+) -> Result<Response, ApiError> {
+    if !valid_backup_name(&name) {
+        return Err(ApiError::bad("Nom de sauvegarde invalide"));
+    }
+    let path = crate::backup::backup_dir(&st.data.config.root).join(&name);
+    let bytes = tokio::fs::read(&path)
+        .await
+        .map_err(|_| ApiError::not_found())?;
+    audit(&st, &admin, &format!("sauvegarde téléchargée : {name}"));
+    Ok((
+        [
+            (
+                axum::http::header::CONTENT_TYPE,
+                "application/vnd.sqlite3".to_string(),
+            ),
+            (
+                axum::http::header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"{name}\""),
+            ),
+            (axum::http::header::CACHE_CONTROL, "no-store".to_string()),
+        ],
+        bytes,
+    )
+        .into_response())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn backup_names_cannot_escape_the_folder() {
+        assert!(super::valid_backup_name(
+            "db_backup_20261123_081500.sqlite3"
+        ));
+        assert!(!super::valid_backup_name(
+            "../db_backup_20261123_081500.sqlite3"
+        ));
+        assert!(!super::valid_backup_name(
+            "db_backup_2026112X_081500.sqlite3"
+        ));
+        assert!(!super::valid_backup_name("database.sqlite3"));
+        assert!(!super::valid_backup_name(
+            "db_backup_20261123_081500.sqlite3/../x"
+        ));
+    }
 }

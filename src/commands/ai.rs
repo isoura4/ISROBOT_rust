@@ -56,7 +56,11 @@ pub async fn ai(ctx: Context<'_>, question: String) -> Result<(), Error> {
     };
     if let Some(rem) = remaining {
         let secs = rem.as_secs().max(1);
-        let time = if secs >= 60 { format!("{} min", secs.div_ceil(60)) } else { format!("{secs} s") };
+        let time = if secs >= 60 {
+            format!("{} min", secs.div_ceil(60))
+        } else {
+            format!("{secs} s")
+        };
         ctx.send(
             CreateReply::default()
                 .content(tr!("errors.cooldown", loc, time = time))

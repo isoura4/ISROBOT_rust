@@ -57,7 +57,12 @@ pub async fn count(
 }
 
 /// Définit LE salon du compteur du serveur (un seul par serveur) ; le compteur repart de zéro.
-pub fn set_channel(conn: &rusqlite::Connection, guild: &str, channel: &str, user: &str) -> rusqlite::Result<()> {
+pub fn set_channel(
+    conn: &rusqlite::Connection,
+    guild: &str,
+    channel: &str,
+    user: &str,
+) -> rusqlite::Result<()> {
     conn.execute("DELETE FROM counter_game WHERE guildId = ?1", [guild])?;
     conn.execute(
         "INSERT INTO counter_game (guildId, channelId, messageId, userId, lastUserId, count)

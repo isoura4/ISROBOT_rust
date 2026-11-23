@@ -325,7 +325,6 @@ mod tests {
         assert!(!contains_inappropriate_content("numéro"));
     }
 
-
     #[test]
     fn provider_responses() {
         assert_eq!(

@@ -212,13 +212,10 @@ async fn event_handler(
                 tracing::error!("Erreur lors du traitement du jeu de comptage: {e:#}");
             }
         }
-        serenity::FullEvent::VoiceStateUpdate { new, .. } => {
-            if features::is_enabled("xp_voice") {
-                commands::xp_voice::on_voice_state_update(ctx, data, new);
-            }
+        serenity::FullEvent::VoiceStateUpdate { new, .. } if features::is_enabled("xp_voice") => {
+            commands::xp_voice::on_voice_state_update(ctx, data, new);
         }
         _ => {}
     }
     Ok(())
 }
-

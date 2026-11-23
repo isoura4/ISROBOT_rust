@@ -214,7 +214,9 @@ mod tests {
         init(&db).unwrap();
         init(&db).unwrap();
         let conn = db.connect().unwrap();
-        let n: i64 = conn.query_row("SELECT COUNT(*) FROM users", [], |r| r.get(0)).unwrap();
+        let n: i64 = conn
+            .query_row("SELECT COUNT(*) FROM users", [], |r| r.get(0))
+            .unwrap();
         assert_eq!(n, 0);
     }
 

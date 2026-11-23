@@ -291,3 +291,13 @@ CREATE TABLE IF NOT EXISTS user_cooldowns (
     last_action_at TEXT DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(guildId, userId, action_type)
 );
+
+-- --- Interface web (version Rust uniquement) ---
+
+CREATE TABLE IF NOT EXISTS web_audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    username TEXT NOT NULL,
+    action TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);

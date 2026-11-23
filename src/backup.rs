@@ -13,7 +13,7 @@ use rusqlite::{Connection, OpenFlags};
 use crate::bot::Data;
 use crate::config;
 
-const PREFIX: &str = "db_backup";
+pub const PREFIX: &str = "db_backup";
 
 pub fn backup_dir(root: &Path) -> PathBuf {
     let dir = PathBuf::from(config::var("BACKUP_DIR").unwrap_or_else(|_| "backups".into()));
@@ -50,7 +50,7 @@ pub fn copy_db(src: &Path, dest: &Path) -> Result<()> {
     Ok(())
 }
 
-fn backups(dir: &Path, prefix: &str) -> Vec<PathBuf> {
+pub fn backups(dir: &Path, prefix: &str) -> Vec<PathBuf> {
     let mut files: Vec<(std::time::SystemTime, PathBuf)> = std::fs::read_dir(dir)
         .into_iter()
         .flatten()

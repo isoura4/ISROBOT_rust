@@ -337,12 +337,17 @@ async fn auth_token(http: &reqwest::Client) -> anyhow::Result<String> {
 
 /// Streams en cours pour une liste de chaînes, indexés par login (minuscules).
 /// Une seule requête par lot de 100 chaînes (limite de l'API Helix).
-async fn live_streams(http: &reqwest::Client, logins: &[String]) -> anyhow::Result<HashMap<String, Value>> {
-    let (client_id, _) = credentials().ok_or_else(|| anyhow::anyhow!("Identifiants Twitch absents"))?;
+async fn live_streams(
+    http: &reqwest::Client,
+    logins: &[String],
+) -> anyhow::Result<HashMap<String, Value>> {
+    let (client_id, _) =
+        credentials().ok_or_else(|| anyhow::anyhow!("Identifiants Twitch absents"))?;
     let token = auth_token(http).await?;
     let mut live = HashMap::new();
     for chunk in logins.chunks(100) {
-        let mut query: Vec<(&str, &str)> = chunk.iter().map(|l| ("user_login", l.as_str())).collect();
+        let mut query: Vec<(&str, &str)> =
+            chunk.iter().map(|l| ("user_login", l.as_str())).collect();
         query.push(("first", "100"));
         let data: Value = with_retry("les streams Twitch", || async {
             let resp = http
@@ -362,7 +367,10 @@ async fn live_streams(http: &reqwest::Client, logins: &[String]) -> anyhow::Resu
                 *TOKEN.lock().unwrap() = None;
             }
             if !status.is_success() {
-                return Err((false, anyhow::anyhow!("Erreur lors de la vérification des streams: {status}")));
+                return Err((
+                    false,
+                    anyhow::anyhow!("Erreur lors de la vérification des streams: {status}"),
+                ));
             }
             resp.json::<Value>().await.map_err(|e| (true, e.into()))
         })

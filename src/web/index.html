@@ -109,7 +109,9 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     <button data-page="features">Fonctionnalités</button>
     <button data-page="notifications">Notifications</button>
     <button data-page="counter">Compteur</button>
-    <button data-page="leaderboard">Classement</button>
+    <button data-page="leaderboard">Membres &amp; XP</button>
+    <button data-page="backups">Sauvegardes</button>
+    <button data-page="audit">Journal</button>
     <div class="spacer"></div>
     <div class="me"><img id="me-avatar" alt=""><span id="me-name"></span></div>
     <button id="logout">Se déconnecter</button>
@@ -309,10 +311,57 @@ const pages = {
 
   async leaderboard() {
     const lb = await api("/leaderboard");
-    page("Classement", "Les 25 membres avec le plus d'XP.",
-      card(null, table(["#", "Membre", { label: "Niveau", num: true }, { label: "XP", num: true }, { label: "Messages", num: true }, { label: "Pièces", num: true }],
-        lb.map((u, i) => el("tr", {}, el("td", {}, i + 1), el("td", {}, u.name), el("td", { class: "num" }, u.level), el("td", { class: "num" }, fmtNum(u.xp)), el("td", { class: "num" }, fmtNum(u.messages)), el("td", { class: "num" }, fmtNum(u.coins)))),
+    const edit = async (id, name, xp) => {
+      const v = prompt("Nouvelle XP pour " + name + " (le niveau est recalculé) :", xp);
+      if (v === null) return;
+      const r = await api("/members/" + id, { method: "PUT", body: { xp: Number(v) } });
+      toast(r.name + " : " + fmtNum(r.xp) + " XP, niveau " + r.level); pages.leaderboard();
+    };
+    const reset = async (id, name) => {
+      if (!confirm("Réinitialiser toute la progression (XP, niveau, messages) de " + name + " ?")) return;
+      await api("/members/" + id, { method: "DELETE" }); toast("Progression réinitialisée"); pages.leaderboard();
+    };
+    const btn = (label, cls, fn) => { const b = el("button", { class: "btn small " + cls, type: "button" }, label); b.addEventListener("click", () => withBusy(b, fn)); return b; };
+
+    const idInput = el("input", { type: "text", inputmode: "numeric", placeholder: "ID Discord du membre" });
+    const result = el("div");
+    const find = el("button", { class: "btn", type: "button" }, "Rechercher");
+    find.addEventListener("click", () => withBusy(find, async () => {
+      const m = await api("/members/" + encodeURIComponent(idInput.value.trim()));
+      fill(result, el("p", {}, el("strong", {}, m.name), " — niveau " + m.level + " · " + fmtNum(m.xp) + " XP · " + fmtNum(m.messages) + " messages"),
+        el("div", { class: "actions", style: "justify-content:flex-start" },
+          btn("Modifier l'XP", "secondary", () => edit(m.user_id, m.name, m.xp)),
+          m.exists ? btn("Réinitialiser", "danger", () => reset(m.user_id, m.name)) : null));
+    }));
+
+    page("Membres & XP", "Classement des 25 premiers et modification de l'XP d'un membre.",
+      card("Trouver un membre", el("div", { class: "form" }, field("ID du membre", idInput, "Clic droit sur le membre → Copier l'identifiant (mode développeur)")),
+        el("div", { class: "actions" }, find), result),
+      card("Classement", table(["#", "Membre", { label: "Niveau", num: true }, { label: "XP", num: true }, { label: "Messages", num: true }, ""],
+        lb.map((u, i) => el("tr", {}, el("td", {}, i + 1), el("td", {}, u.name), el("td", { class: "num" }, u.level), el("td", { class: "num" }, fmtNum(u.xp)), el("td", { class: "num" }, fmtNum(u.messages)),
+          el("td", { class: "num" }, btn("XP", "secondary", () => edit(u.user_id, u.name, u.xp)), " ", btn("Réinitialiser", "danger", () => reset(u.user_id, u.name))))),
         "Aucun membre n'a encore d'XP.")));
+  },
+
+  async backups() {
+    const list = await api("/backups");
+    const create = el("button", { class: "btn", type: "button" }, "Créer une sauvegarde maintenant");
+    create.addEventListener("click", () => withBusy(create, async () => { const r = await api("/backups", { method: "POST" }); toast("Sauvegarde créée : " + r.name); pages.backups(); }));
+    const size = (b) => b > 1048576 ? (b / 1048576).toFixed(1) + " Mo" : Math.ceil(b / 1024) + " Ko";
+    page("Sauvegardes", "Une sauvegarde vérifiée est faite automatiquement toutes les 6 heures (les plus anciennes sont supprimées selon MAX_BACKUPS).",
+      card(null, el("div", { class: "actions", style: "margin-top:0" }, create)),
+      card("Sauvegardes disponibles", table(["Fichier", "Date", { label: "Taille", num: true }, ""],
+        list.map((b) => el("tr", {}, el("td", {}, b.name), el("td", {}, fmtDate(b.at)), el("td", { class: "num" }, size(b.size)),
+          el("td", { class: "num" }, el("a", { class: "btn small secondary", href: "/api/backups/" + encodeURIComponent(b.name), download: b.name }, "Télécharger")))),
+        "Aucune sauvegarde pour l'instant.")));
+  },
+
+  async audit() {
+    const rows = await api("/audit");
+    page("Journal", "Les 200 dernières actions effectuées depuis l'interface web.",
+      card(null, table(["Date", "Administrateur", "Action"],
+        rows.map((r) => el("tr", {}, el("td", {}, fmtDate(r.at)), el("td", {}, r.name), el("td", {}, r.action))),
+        "Aucune action enregistrée.")));
   },
 };
 
