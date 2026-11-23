@@ -77,6 +77,11 @@ async fn main() -> Result<()> {
     }
     let _ = dotenvy::from_path(root.join(".env"));
     let _log_guard = init_logging(&root);
+    for key in config::duplicate_keys(&root) {
+        tracing::warn!(
+            "La variable {key} est définie plusieurs fois dans .env : seule la PREMIÈRE valeur est utilisée. Supprimez les doublons."
+        );
+    }
 
     let config = match Config::from_env(&root) {
         Ok(c) => c,

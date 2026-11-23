@@ -145,6 +145,9 @@ pub fn spawn(ctx: serenity::Context, data: Data) {
                 tracing::info!(
                     "[Web] Interface d'administration disponible sur {base} (écoute {bind})"
                 );
+                tracing::info!(
+                    "[Web] URL de redirection à déclarer dans le portail Discord (OAuth2 > Redirects) : {base}/auth/callback"
+                );
                 if let Err(e) = axum::serve(listener, app).await {
                     tracing::error!("[Web] Arrêt du serveur web: {e}");
                 }

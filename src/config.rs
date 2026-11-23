@@ -45,6 +45,21 @@ fn parse_env_entries(content: &str) -> Vec<(String, String)> {
         .collect()
 }
 
+/// Variables définies plusieurs fois dans `.env` (seule la première est prise en compte).
+pub fn duplicate_keys(root: &Path) -> Vec<String> {
+    let Ok(content) = fs::read_to_string(root.join(".env")) else {
+        return vec![];
+    };
+    let mut seen = HashSet::new();
+    let mut dups = Vec::new();
+    for (k, _) in parse_env_entries(&content) {
+        if !seen.insert(k.clone()) && !dups.contains(&k) {
+            dups.push(k);
+        }
+    }
+    dups
+}
+
 /// Ajoute dans `.env` les variables présentes dans `.env.example` mais absentes
 /// (crée le `.env` complet au premier lancement).
 pub fn ensure_env_variables(root: &Path) -> Result<()> {
@@ -266,6 +281,14 @@ mod tests {
         std::fs::write(dir.join(".env"), "TEST_RELOAD_KEY=\"quoted\"\n").unwrap();
         reload_env(&dir).unwrap();
         assert_eq!(var("TEST_RELOAD_KEY").unwrap(), "quoted");
+    }
+
+    #[test]
+    fn detects_duplicates() {
+        let dir = std::env::temp_dir().join(format!("isrobot-dup-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(".env"), "A=1\nB=2\nA=3\n").unwrap();
+        assert_eq!(duplicate_keys(&dir), vec!["A".to_string()]);
     }
 
     #[test]
