@@ -5,10 +5,12 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.105"
-chrono = "0.4.45"
+chrono = { version = "0.4.45", features = ["serde"] }
 dotenvy = "0.15.7"
 poise = "0.7"
 rand = "0.8"
+regex = "1.13.2"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "gzip"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
@@ -17,3 +19,4 @@ tokio = { version = "1", features = ["full"] }
 tracing = "0.1.44"
 tracing-appender = "0.2.5"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+url = "2.5.9"

@@ -7,7 +7,10 @@ mod db;
 mod errors;
 mod features;
 mod i18n;
+mod moderation;
 mod quests;
+mod tasks;
+mod ui;
 mod xp;
 
 use std::path::PathBuf;
@@ -121,7 +124,9 @@ async fn main() -> Result<()> {
                         "{} commande(s) synchronisée(s) avec le serveur",
                         framework.options().commands.len()
                     );
-                    Ok(Data::new(config, database))
+                    let data = Data::new(config, database);
+                    tasks::spawn_all(ctx.clone(), data.clone());
+                    Ok(data)
                 })
             }
         })
@@ -203,6 +208,18 @@ async fn event_handler(
             }
             if let Err(e) = commands::count::on_message(ctx, data, msg).await {
                 tracing::error!("Erreur lors du traitement du jeu de comptage: {e:#}");
+            }
+        }
+        serenity::FullEvent::VoiceStateUpdate { new, .. } => {
+            if features::is_enabled("xp_voice") {
+                commands::xp_voice::on_voice_state_update(ctx, data, new);
+            }
+        }
+        serenity::FullEvent::InteractionCreate {
+            interaction: serenity::Interaction::Component(ci),
+        } => {
+            if let Err(e) = commands::handle_component(ctx, data, ci).await {
+                tracing::error!("Erreur lors du traitement d'un composant: {e:#}");
             }
         }
         _ => {}
