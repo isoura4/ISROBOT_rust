@@ -5,6 +5,7 @@ pub mod ai;
 pub mod basic;
 pub mod bluesky;
 pub mod count;
+pub mod minigame;
 pub mod moderation;
 pub mod stream;
 pub mod xp_system;
@@ -55,6 +56,7 @@ fn modules() -> Vec<(&'static str, Builder)> {
         ("youtube", || {
             vec![youtube::youtube_add(), youtube::youtube_remove()]
         }),
+        ("minigame", minigame::commands),
         ("bluesky", || {
             vec![
                 bluesky::bluesky_add(),

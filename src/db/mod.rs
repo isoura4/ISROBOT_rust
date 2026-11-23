@@ -50,6 +50,23 @@ impl Db {
     }
 }
 
+impl Db {
+    /// Comme [`Db::run`], dans une transaction validée si `f` réussit.
+    pub async fn tx<T, F>(&self, f: F) -> Result<T>
+    where
+        T: Send + 'static,
+        F: FnOnce(&Connection) -> Result<T> + Send + 'static,
+    {
+        self.run(move |c| {
+            let tx = c.transaction()?;
+            let out = f(&tx)?;
+            tx.commit()?;
+            Ok(out)
+        })
+        .await
+    }
+}
+
 fn open(path: &Path) -> Result<Connection> {
     let conn = Connection::open(path).with_context(|| {
         format!(
@@ -390,6 +407,12 @@ pub fn utcnow_iso() -> String {
         .naive_utc()
         .format("%Y-%m-%dT%H:%M:%S%.6f")
         .to_string()
+}
+
+/// Données par défaut (quêtes, boutique) pour les tests des autres modules.
+#[cfg(test)]
+pub fn seed_for_tests(conn: &mut Connection) {
+    seed_defaults(conn).unwrap();
 }
 
 #[cfg(test)]

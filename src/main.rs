@@ -6,6 +6,7 @@ mod bot;
 mod commands;
 mod config;
 mod db;
+mod economy;
 mod errors;
 mod features;
 mod i18n;

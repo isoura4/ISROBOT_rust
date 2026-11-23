@@ -41,6 +41,9 @@ pub struct State {
     pub config: Config,
     /// Client HTTP partagé pour les API externes (Twitch, YouTube, IA...).
     pub http: reqwest::Client,
+    /// Confirmations en attente pour les échanges d'XP faisant perdre un niveau :
+    /// (serveur, utilisateur) → (destinataire, pièces, XP, instant).
+    pub xp_confirmations: Mutex<HashMap<(u64, u64), (u64, i64, i64, Instant)>>,
     /// Sessions vocales : dernier crédit d'XP par (serveur, utilisateur), en secondes epoch.
     pub voice_sessions: Mutex<HashMap<(u64, u64), i64>>,
     pub db: Db,
@@ -62,6 +65,7 @@ impl Data {
             config,
             http,
             voice_sessions: Mutex::default(),
+            xp_confirmations: Mutex::default(),
             db,
             xp_cooldowns: Mutex::default(),
             counter_locks: Mutex::default(),
