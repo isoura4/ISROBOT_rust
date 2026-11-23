@@ -1,5 +1,6 @@
 //! ISROBOT — version Rust (poise + serenity).
 
+mod ai;
 mod bot;
 mod commands;
 mod config;

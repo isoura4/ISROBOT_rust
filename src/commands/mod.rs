@@ -1,5 +1,6 @@
 //! Enregistrement des commandes et localisation de leurs descriptions.
 
+pub mod ai;
 pub mod basic;
 pub mod count;
 pub mod moderation;
@@ -17,6 +18,7 @@ type Builder = fn() -> Vec<Command>;
 /// (clé de fonctionnalité `COG_*`, commandes du module)
 fn modules() -> Vec<(&'static str, Builder)> {
     vec![
+        ("ai", || vec![ai::ai()]),
         ("ping", || vec![basic::ping()]),
         ("ping_bot", || vec![basic::ping_bot()]),
         ("coinflip", || vec![basic::coinflip()]),
